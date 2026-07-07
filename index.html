@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>맛집 레이더 — 감성 키워드로 찾는 우리 동네 맛집</title>
+<meta name="description" content="얼큰한 국물, 시원한 해장 — 말하듯 검색하면 근처 맛집을 후기와 함께 찾아드립니다." />
+
+<!-- ─────────────────────────────────────────────
+  ① 여기에 카카오 개발자 콘솔의 "JavaScript 키"를 넣어주세요.
+     (developers.kakao.com → 내 애플리케이션 → 앱 키)
+     플랫폼 > Web 에 배포 도메인 등록도 필요합니다.
+────────────────────────────────────────────── -->
+<script>
+  const KAKAO_JS_KEY = "여기에_카카오_JAVASCRIPT_키_입력";
+</script>
+
+<link rel="preconnect" href="https://cdn.jsdelivr.net" />
+<link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&display=swap" rel="stylesheet" />
+
+<style>
+  :root {
+    --bg: #f6f4ef;          /* 백자 */
+    --card: #fffdf9;
+    --ink: #211d19;
+    --ink-soft: #6f675e;
+    --line: #e4ded4;
+    --broth: #be3312;       /* 고추장 */
+    --broth-deep: #93230a;
+    --kim: #33513f;         /* 김(해태) */
+    --kim-soft: #eaf0ec;
+    --ticket: #fdf8ec;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    font-family: "Pretendard Variable", Pretendard, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.55;
+    min-height: 100dvh;
+  }
+  .wrap { max-width: 640px; margin: 0 auto; padding: 0 16px 80px; }
+
+  /* ── 헤더 ── */
+  header { padding: 28px 0 6px; }
+  .brand {
+    font-family: "Gowun Batang", serif;
+    font-weight: 700;
+    font-size: 30px;
+    letter-spacing: -0.5px;
+  }
+  .brand .dot { color: var(--broth); }
+  .tagline { color: var(--ink-soft); font-size: 13.5px; margin-top: 2px; }
+
+  /* ── 검색 폼 ── */
+  .panel {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-top: 16px;
+    box-shadow: 0 1px 3px rgba(33,29,25,.05);
+  }
+  .search-row { display: flex; gap: 8px; }
+  .search-row input {
+    flex: 1; min-width: 0;
+    font: inherit; font-size: 16px;
+    padding: 13px 14px;
+    border: 1.5px solid var(--line);
+    border-radius: 10px;
+    background: #fff;
+    color: var(--ink);
+  }
+  .search-row input::placeholder { color: #b3aa9e; }
+  .search-row input:focus,
+  button:focus-visible, a:focus-visible, .chip input:focus-visible + span {
+    outline: 2px solid var(--broth); outline-offset: 2px;
+  }
+  .btn-search {
+    font: inherit; font-weight: 700; font-size: 15px;
+    background: var(--broth); color: #fff;
+    border: none; border-radius: 10px;
+    padding: 0 20px; cursor: pointer;
+    transition: background .15s;
+    flex-shrink: 0;
+  }
+  .btn-search:hover { background: var(--broth-deep); }
+  .btn-search:disabled { background: #cfc7bb; cursor: default; }
+
+  .options { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; align-items: center; }
+  .opt-label { font-size: 12.5px; color: var(--ink-soft); margin-right: 2px; }
+  .chip { position: relative; }
+  .chip input { position: absolute; opacity: 0; pointer-events: none; }
+  .chip span {
+    display: inline-block;
+    font-size: 13.5px; font-weight: 600;
+    padding: 7px 13px;
+    border: 1.5px solid var(--line);
+    border-radius: 999px;
+    background: #fff; color: var(--ink-soft);
+    cursor: pointer; user-select: none;
+    transition: all .12s;
+  }
+  .chip input:checked + span {
+    background: var(--broth); border-color: var(--broth); color: #fff;
+  }
+  .divider-dot { color: var(--line); }
+
+  .loc-input-row { display: none; margin-top: 10px; gap: 8px; }
+  .loc-input-row.show { display: flex; }
+  .loc-input-row input {
+    flex: 1; min-width: 0; font: inherit; font-size: 15px;
+    padding: 11px 13px;
+    border: 1.5px solid var(--line); border-radius: 10px; background: #fff;
+  }
+  .loc-status { font-size: 12.5px; color: var(--kim); margin-top: 8px; }
+  .loc-status.err { color: var(--broth); }
+
+  /* ── 주문서(키워드 변환 티켓) — 시그니처 ── */
+  .ticket {
+    display: none;
+    margin-top: 18px;
+    background: var(--ticket);
+    border: 1px dashed #d9c9a3;
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-size: 14px;
+  }
+  .ticket.show { display: block; }
+  .ticket .t-label {
+    font-family: "Gowun Batang", serif;
+    font-size: 12px; color: #9b7f45; letter-spacing: 2px;
+  }
+  .ticket .t-body { margin-top: 4px; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+  .ticket .orig { color: var(--ink-soft); }
+  .ticket .arrow { color: #c9ab6b; }
+  .kw {
+    background: #fff; border: 1px solid #e2d4b4;
+    border-radius: 6px; padding: 2px 9px;
+    font-weight: 700; color: var(--broth-deep); font-size: 13.5px;
+  }
+
+  /* ── 결과 ── */
+  .results { margin-top: 18px; display: flex; flex-direction: column; gap: 12px; }
+  .result-meta { font-size: 13px; color: var(--ink-soft); padding: 0 2px; }
+
+  .place {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 16px;
+  }
+  .place-top { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+  .place-name {
+    font-family: "Gowun Batang", serif;
+    font-weight: 700; font-size: 19px; letter-spacing: -0.3px;
+  }
+  .place-dist {
+    flex-shrink: 0; font-size: 13px; font-weight: 700; color: var(--broth);
+    background: #fbeae5; border-radius: 6px; padding: 2px 8px;
+  }
+  .place-cat { font-size: 12.5px; color: var(--ink-soft); margin-top: 2px; }
+  .place-addr { font-size: 13.5px; color: var(--ink-soft); margin-top: 6px; }
+  .place-phone { font-size: 13.5px; margin-top: 2px; }
+  .place-phone a { color: var(--kim); text-decoration: none; font-weight: 600; }
+
+  .links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .links a {
+    font-size: 13px; font-weight: 600; text-decoration: none;
+    padding: 7px 12px; border-radius: 8px;
+    border: 1.5px solid var(--line); color: var(--ink);
+    background: #fff;
+    transition: border-color .12s;
+  }
+  .links a:hover { border-color: var(--ink-soft); }
+  .links a.primary { background: var(--kim); border-color: var(--kim); color: #fff; }
+
+  .reviews { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px; }
+  .reviews-head { font-size: 12.5px; color: var(--ink-soft); display: flex; justify-content: space-between; }
+  .ad-note { color: var(--kim); font-weight: 600; }
+  .review { margin-top: 10px; }
+  .review a {
+    display: block; text-decoration: none; color: inherit;
+    font-size: 14px; font-weight: 600; line-height: 1.4;
+  }
+  .review a:hover { color: var(--broth-deep); text-decoration: underline; }
+  .review p { font-size: 13px; color: var(--ink-soft); margin-top: 2px;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .review .rmeta { font-size: 11.5px; color: #a89f93; margin-top: 2px; }
+  .reviews .loading, .reviews .none { font-size: 13px; color: #a89f93; margin-top: 8px; }
+
+  /* ── 상태 표시 ── */
+  .state { text-align: center; padding: 48px 12px; color: var(--ink-soft); font-size: 14.5px; display: none; }
+  .state.show { display: block; }
+  .state .big { font-family: "Gowun Batang", serif; font-size: 22px; color: var(--ink); margin-bottom: 6px; }
+  .spinner {
+    width: 26px; height: 26px; margin: 0 auto 12px;
+    border: 3px solid var(--line); border-top-color: var(--broth);
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) {
+    .spinner { animation: none; }
+    * { transition: none !important; }
+  }
+
+  .setup-warn {
+    display: none;
+    margin-top: 16px; padding: 14px 16px;
+    background: #fbeae5; border: 1px solid #eec4b8; border-radius: 10px;
+    font-size: 13.5px; color: var(--broth-deep);
+  }
+  .setup-warn.show { display: block; }
+  footer { margin-top: 40px; font-size: 12px; color: #b3aa9e; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">맛집 레이더<span class="dot">.</span></div>
+    <div class="tagline">말하듯 검색하면, 근처 맛집을 후기와 함께 찾아드려요</div>
+  </header>
+
+  <div id="setupWarn" class="setup-warn">
+    아직 카카오 JavaScript 키가 설정되지 않았어요. <b>index.html 상단</b>의
+    <code>KAKAO_JS_KEY</code>에 키를 넣고 다시 배포해 주세요.
+  </div>
+
+  <section class="panel">
+    <div class="search-row">
+      <input id="query" type="search" placeholder="예) 낙지 들어간 얼큰한 짬뽕" enterkeyhint="search" />
+      <button id="btnSearch" class="btn-search">찾기</button>
+    </div>
+
+    <div class="options" role="radiogroup" aria-label="검색 반경">
+      <span class="opt-label">반경</span>
+      <label class="chip"><input type="radio" name="radius" value="1000"><span>1km</span></label>
+      <label class="chip"><input type="radio" name="radius" value="3000" checked><span>3km</span></label>
+      <label class="chip"><input type="radio" name="radius" value="5000"><span>5km</span></label>
+      <label class="chip"><input type="radio" name="radius" value="10000"><span>10km</span></label>
+    </div>
+
+    <div class="options" role="radiogroup" aria-label="기준 위치">
+      <span class="opt-label">위치</span>
+      <label class="chip"><input type="radio" name="locmode" value="gps" checked><span>내 위치</span></label>
+      <label class="chip"><input type="radio" name="locmode" value="manual"><span>직접 입력</span></label>
+    </div>
+
+    <div id="locInputRow" class="loc-input-row">
+      <input id="locInput" type="text" placeholder="예) 판교역, 성수동, 강릉 중앙시장" />
+    </div>
+    <div id="locStatus" class="loc-status"></div>
+  </section>
+
+  <div id="ticket" class="ticket" aria-live="polite">
+    <div class="t-label">주 문 서</div>
+    <div class="t-body" id="ticketBody"></div>
+  </div>
+
+  <div id="stateLoading" class="state"><div class="spinner"></div>맛집을 찾는 중이에요…</div>
+  <div id="stateEmpty" class="state"><div class="big">아직 텅 비었어요</div>먹고 싶은 걸 편하게 적어보세요.<br>"시원한 해장", "아이랑 가기 좋은 돈까스"도 좋아요.</div>
+  <div id="stateNone" class="state"><div class="big">이 근처엔 없네요</div>반경을 넓히거나 다른 키워드로 시도해 보세요.</div>
+
+  <div id="resultMeta" class="result-meta"></div>
+  <div id="results" class="results"></div>
+
+  <footer>가족용 개인 도구 · 후기 출처: 네이버 블로그 · 장소 정보: 카카오</footer>
+</div>
+
+<script>
+"use strict";
+
+/* ───────── 상태 ───────── */
+let kakaoReady = false;
+let placesSvc = null;
+let searching = false;
+
+const $ = (id) => document.getElementById(id);
+const els = {
+  query: $("query"), btn: $("btnSearch"),
+  locInputRow: $("locInputRow"), locInput: $("locInput"), locStatus: $("locStatus"),
+  ticket: $("ticket"), ticketBody: $("ticketBody"),
+  loading: $("stateLoading"), empty: $("stateEmpty"), none: $("stateNone"),
+  results: $("results"), resultMeta: $("resultMeta"),
+  setupWarn: $("setupWarn"),
+};
+
+/* ───────── 카카오 SDK 로드 ───────── */
+(function loadKakao() {
+  if (!KAKAO_JS_KEY || KAKAO_JS_KEY.includes("입력")) {
+    els.setupWarn.classList.add("show");
+    return;
+  }
+  const s = document.createElement("script");
+  s.src = "https://dapi.kakao.com/v2/maps/sdk.js?appkey=" + KAKAO_JS_KEY + "&libraries=services&autoload=false";
+  s.onload = () => kakao.maps.load(() => {
+    kakaoReady = true;
+    placesSvc = new kakao.maps.services.Places();
+  });
+  s.onerror = () => {
+    els.setupWarn.textContent = "카카오 SDK 로드에 실패했어요. JavaScript 키와 도메인 등록(플랫폼 > Web)을 확인해 주세요.";
+    els.setupWarn.classList.add("show");
+  };
+  document.head.appendChild(s);
+})();
+
+/* ───────── UI 이벤트 ───────── */
+els.empty.classList.add("show");
+
+document.querySelectorAll('input[name="locmode"]').forEach((r) =>
+  r.addEventListener("change", () => {
+    const manual = document.querySelector('input[name="locmode"]:checked').value === "manual";
+    els.locInputRow.classList.toggle("show", manual);
+    els.locStatus.textContent = "";
+    if (manual) els.locInput.focus();
+  })
+);
+
+els.btn.addEventListener("click", runSearch);
+els.query.addEventListener("keydown", (e) => { if (e.key === "Enter") runSearch(); });
+els.locInput.addEventListener("keydown", (e) => { if (e.key === "Enter") runSearch(); });
+
+/* ───────── 검색 파이프라인 ───────── */
+async function runSearch() {
+  const q = els.query.value.trim();
+  if (!q || searching) return;
+  if (!kakaoReady) {
+    els.locStatus.textContent = "지도 서비스를 아직 불러오는 중이에요. 잠시 후 다시 시도해 주세요.";
+    els.locStatus.className = "loc-status err";
+    return;
+  }
+
+  searching = true;
+  els.btn.disabled = true;
+  showState("loading");
+  els.results.innerHTML = "";
+  els.resultMeta.textContent = "";
+  els.ticket.classList.remove("show");
+
+  try {
+    // 1) 기준 좌표
+    const center = await getCenter();
+    // 2) 감성 키워드 → 실제 검색 키워드 (Claude, 캐시 우선)
+    const { keywords, converted } = await convertKeywords(q);
+    renderTicket(q, keywords, converted);
+    // 3) 카카오 장소 검색 (키워드별 병렬)
+    const radius = Number(document.querySelector('input[name="radius"]:checked').value);
+    const places = await searchPlaces(keywords, center, radius);
+
+    if (places.length === 0) { showState("none"); return; }
+
+    showState(null);
+    els.resultMeta.textContent = `반경 ${radius / 1000}km · ${places.length}곳 (가까운 순)`;
+    places.forEach((p) => els.results.appendChild(renderPlace(p)));
+    // 4) 각 식당 블로그 후기 (병렬, 실패해도 카드 유지)
+    places.forEach((p) => loadReviews(p));
+  } catch (e) {
+    showState(null);
+    els.locStatus.textContent = e.message || "검색 중 문제가 발생했어요.";
+    els.locStatus.className = "loc-status err";
+  } finally {
+    searching = false;
+    els.btn.disabled = false;
+  }
+}
+
+function showState(which) {
+  ["loading", "empty", "none"].forEach((k) => els[k].classList.remove("show"));
+  if (which) els[which].classList.add("show");
+}
+
+/* ───────── 1) 기준 좌표 ───────── */
+function getCenter() {
+  const mode = document.querySelector('input[name="locmode"]:checked').value;
+  els.locStatus.className = "loc-status";
+
+  if (mode === "manual") {
+    const text = els.locInput.value.trim();
+    if (!text) throw new Error("기준이 될 장소를 입력해 주세요. (예: 판교역)");
+    return new Promise((resolve, reject) => {
+      placesSvc.keywordSearch(text, (data, status) => {
+        if (status === kakao.maps.services.Status.OK && data.length) {
+          els.locStatus.textContent = `기준 위치: ${data[0].place_name} (${data[0].address_name})`;
+          resolve({ lat: Number(data[0].y), lng: Number(data[0].x) });
+        } else {
+          reject(new Error(`"${text}" 위치를 찾지 못했어요. 다른 이름으로 시도해 주세요.`));
+        }
+      });
+    });
+  }
+
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error("이 브라우저는 위치 기능을 지원하지 않아요. '직접 입력'을 사용해 주세요."));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        els.locStatus.textContent = "기준 위치: 현재 내 위치";
+        resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+      },
+      () => reject(new Error("위치 권한을 확인해 주세요. 또는 '직접 입력'으로 검색할 수 있어요.")),
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 }
+    );
+  });
+}
+
+/* ───────── 2) 키워드 변환 (Claude + localStorage 캐시) ───────── */
+async function convertKeywords(q) {
+  const cacheKey = "kw:" + q;
+  try {
+    const hit = localStorage.getItem(cacheKey);
+    if (hit) return JSON.parse(hit);
+  } catch (_) {}
+
+  try {
+    const r = await fetch("/api/keywords", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query: q }),
+    });
+    if (r.ok) {
+      const data = await r.json();
+      if (data.keywords && data.keywords.length) {
+        try { localStorage.setItem(cacheKey, JSON.stringify(data)); } catch (_) {}
+        return data;
+      }
+    }
+  } catch (_) {}
+  return { keywords: [q], converted: false }; // 변환 실패 시 원문으로 검색
+}
+
+function renderTicket(orig, keywords, converted) {
+  els.ticketBody.innerHTML = "";
+  const o = document.createElement("span");
+  o.className = "orig"; o.textContent = "“" + orig + "”";
+  els.ticketBody.appendChild(o);
+  if (converted) {
+    const a = document.createElement("span");
+    a.className = "arrow"; a.textContent = "→";
+    els.ticketBody.appendChild(a);
+    keywords.forEach((k) => {
+      const c = document.createElement("span");
+      c.className = "kw"; c.textContent = k;
+      els.ticketBody.appendChild(c);
+    });
+  }
+  els.ticket.classList.add("show");
+}
+
+/* ───────── 3) 카카오 장소 검색 ───────── */
+function searchPlaces(keywords, center, radius) {
+  const loc = new kakao.maps.LatLng(center.lat, center.lng);
+  const one = (kw) =>
+    new Promise((resolve) => {
+      placesSvc.keywordSearch(
+        kw,
+        (data, status) => resolve(status === kakao.maps.services.Status.OK ? data : []),
+        {
+          location: loc,
+          radius,
+          category_group_code: "FD6", // 음식점만
+          sort: kakao.maps.services.SortBy.DISTANCE,
+          size: 15,
+        }
+      );
+    });
+
+  return Promise.all(keywords.map(one)).then((lists) => {
+    const seen = new Map();
+    lists.flat().forEach((p) => { if (!seen.has(p.id)) seen.set(p.id, p); });
+    return [...seen.values()]
+      .sort((a, b) => Number(a.distance) - Number(b.distance))
+      .slice(0, 15);
+  });
+}
+
+/* ───────── 카드 렌더링 ───────── */
+function fmtDist(m) {
+  const n = Number(m);
+  return n >= 1000 ? (n / 1000).toFixed(1) + "km" : n + "m";
+}
+function shortCat(cat) {
+  const parts = (cat || "").split(">").map((s) => s.trim()).filter(Boolean);
+  return parts.slice(-2).join(" · ");
+}
+function dongOf(addr) {
+  const t = (addr || "").split(" ");
+  for (let i = t.length - 1; i >= 0; i--) {
+    if (/(동|읍|면|가|리)$/.test(t[i])) return t[i];
+  }
+  return t[1] || "";
+}
+
+function renderPlace(p) {
+  const card = document.createElement("article");
+  card.className = "place";
+
+  const naverQ = encodeURIComponent(p.place_name + " " + dongOf(p.address_name));
+  const bluerQ = encodeURIComponent(p.place_name);
+  const road = p.road_address_name || p.address_name;
+
+  card.innerHTML = `
+    <div class="place-top">
+      <div class="place-name"></div>
+      <div class="place-dist">${fmtDist(p.distance)}</div>
+    </div>
+    <div class="place-cat">${shortCat(p.category_name)}</div>
+    <div class="place-addr"></div>
+    ${p.phone ? `<div class="place-phone"><a href="tel:${p.phone}">${p.phone}</a></div>` : ""}
+    <div class="links">
+      <a class="primary" href="${p.place_url}" target="_blank" rel="noopener">카카오맵</a>
+      <a href="https://map.naver.com/p/search/${naverQ}" target="_blank" rel="noopener">네이버지도</a>
+      <a href="https://www.bluer.co.kr/search?query=${bluerQ}" target="_blank" rel="noopener">블루리본</a>
+    </div>
+    <div class="reviews">
+      <div class="reviews-head"><span>블로그 후기</span><span class="ad-note"></span></div>
+      <div class="review-list"><div class="loading">후기를 불러오는 중…</div></div>
+    </div>`;
+
+  card.querySelector(".place-name").textContent = p.place_name;
+  card.querySelector(".place-addr").textContent = road;
+  card.dataset.reviewQuery = p.place_name + " " + dongOf(p.address_name) + " 후기";
+  return card;
+}
+
+/* ───────── 4) 블로그 후기 ───────── */
+async function loadReviews(p) {
+  const card = [...els.results.children].find(
+    (c) => c.querySelector(".place-name").textContent === p.place_name
+  );
+  if (!card) return;
+  const list = card.querySelector(".review-list");
+  const adNote = card.querySelector(".ad-note");
+
+  try {
+    const q = card.dataset.reviewQuery;
+    const r = await fetch("/api/blog?query=" + encodeURIComponent(q) + "&display=3");
+    if (!r.ok) throw new Error();
+    const data = await r.json();
+
+    list.innerHTML = "";
+    if (data.adFiltered > 0) adNote.textContent = `광고성 글 ${data.adFiltered}건 제외`;
+
+    if (!data.reviews || data.reviews.length === 0) {
+      list.innerHTML = '<div class="none">깨끗한 후기를 찾지 못했어요.</div>';
+      return;
+    }
+    data.reviews.forEach((rv) => {
+      const d = document.createElement("div");
+      d.className = "review";
+      const date = rv.date ? `${rv.date.slice(0, 4)}.${rv.date.slice(4, 6)}` : "";
+      d.innerHTML = `<a href="${rv.link}" target="_blank" rel="noopener"></a><p></p><div class="rmeta"></div>`;
+      d.querySelector("a").textContent = rv.title;
+      d.querySelector("p").textContent = rv.description;
+      d.querySelector(".rmeta").textContent = [rv.blogger, date].filter(Boolean).join(" · ");
+      list.appendChild(d);
+    });
+  } catch (_) {
+    list.innerHTML = '<div class="none">후기를 불러오지 못했어요. (네이버 API 키 설정을 확인해 주세요)</div>';
+  }
+}
+</script>
+</body>
+</html>
