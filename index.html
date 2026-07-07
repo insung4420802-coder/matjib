@@ -269,7 +269,7 @@
   <div id="resultMeta" class="result-meta"></div>
   <div id="results" class="results"></div>
 
-  <footer>가족용 개인 도구 · 후기 출처: 네이버 블로그 · 장소 정보: 카카오</footer>
+  <footer>made by jhab · 후기 출처: 네이버 블로그 · 장소 정보: 카카오</footer>
 </div>
 
 <script>
@@ -337,6 +337,7 @@ async function runSearch() {
 
   searching = true;
   els.btn.disabled = true;
+  els.loading.innerHTML = '<div class="spinner"></div>맛집을 찾는 중이에요…';
   showState("loading");
   els.results.innerHTML = "";
   els.resultMeta.textContent = "";
@@ -345,8 +346,8 @@ async function runSearch() {
   try {
     // 1) 기준 좌표
     const center = await getCenter();
-    // 2) 감성 키워드 → 실제 검색 키워드 (Claude, 캐시 우선)
-    const { keywords, converted } = await convertKeywords(q);
+    // 2) 감성 키워드 → 검색 키워드 + 매칭 동의어 (Claude, 캐시 우선)
+    const { keywords, match, converted } = await convertKeywords(q);
     renderTicket(q, keywords, converted);
     // 3) 카카오 장소 검색 (키워드별 병렬)
     const radius = Number(document.querySelector('input[name="radius"]:checked').value);
@@ -354,11 +355,35 @@ async function runSearch() {
 
     if (places.length === 0) { showState("none"); return; }
 
+    // 4) 후보 전체의 블로그 후기를 먼저 수집 (병렬)
+    els.loading.innerHTML = '<div class="spinner"></div>후기를 읽고 진짜 맛집을 고르는 중…';
+    await Promise.all(places.map((p) => fetchReviews(p)));
+
+    // 5) 키워드 매칭 점수로 재랭킹: 이름/카테고리/후기 제목에 매칭어가 없으면 하위로
+    const terms = (match && match.length ? match : keywords).map(normText);
+    places.forEach((p) => { p._score = scorePlace(p, terms); });
+    const matched = places.filter((p) => p._score > 0)
+      .sort((a, b) => b._score - a._score || Number(a.distance) - Number(b.distance));
+    const unmatched = places.filter((p) => p._score === 0)
+      .sort((a, b) => Number(a.distance) - Number(b.distance));
+
     showState(null);
-    els.resultMeta.textContent = `반경 ${radius / 1000}km · ${places.length}곳 (가까운 순)`;
-    places.forEach((p) => els.results.appendChild(renderPlace(p)));
-    // 4) 각 식당 블로그 후기 (병렬, 실패해도 카드 유지)
-    places.forEach((p) => loadReviews(p));
+    els.resultMeta.textContent =
+      `반경 ${radius / 1000}km · 후기까지 확인한 ${matched.length}곳` +
+      (unmatched.length ? ` (관련성 낮은 ${unmatched.length}곳 제외/하단)` : "");
+
+    matched.forEach((p) => els.results.appendChild(renderPlace(p)));
+
+    // 매칭된 곳이 적을 때만 나머지를 하단에 참고용으로 표시
+    if (matched.length < 3 && unmatched.length) {
+      const div = document.createElement("div");
+      div.className = "result-meta";
+      div.style.marginTop = "10px";
+      div.textContent = "아래는 후기에서 키워드를 확인하지 못한 곳이에요 (참고용)";
+      els.results.appendChild(div);
+      unmatched.slice(0, 5).forEach((p) => els.results.appendChild(renderPlace(p)));
+    }
+    if (matched.length === 0 && unmatched.length === 0) showState("none");
   } catch (e) {
     showState(null);
     els.locStatus.textContent = e.message || "검색 중 문제가 발생했어요.";
@@ -412,7 +437,7 @@ function getCenter() {
 
 /* ───────── 2) 키워드 변환 (Claude + localStorage 캐시) ───────── */
 async function convertKeywords(q) {
-  const cacheKey = "kw:" + q;
+  const cacheKey = "kw2:" + q;
   try {
     const hit = localStorage.getItem(cacheKey);
     if (hit) return JSON.parse(hit);
@@ -427,12 +452,13 @@ async function convertKeywords(q) {
     if (r.ok) {
       const data = await r.json();
       if (data.keywords && data.keywords.length) {
+        if (!data.match || !data.match.length) data.match = data.keywords;
         try { localStorage.setItem(cacheKey, JSON.stringify(data)); } catch (_) {}
         return data;
       }
     }
   } catch (_) {}
-  return { keywords: [q], converted: false }; // 변환 실패 시 원문으로 검색
+  return { keywords: [q], match: [q], converted: false }; // 변환 실패 시 원문으로 검색
 }
 
 function renderTicket(orig, keywords, converted) {
@@ -476,7 +502,7 @@ function searchPlaces(keywords, center, radius) {
     lists.flat().forEach((p) => { if (!seen.has(p.id)) seen.set(p.id, p); });
     return [...seen.values()]
       .sort((a, b) => Number(a.distance) - Number(b.distance))
-      .slice(0, 15);
+      .slice(0, 20);
   });
 }
 
@@ -495,6 +521,48 @@ function dongOf(addr) {
     if (/(동|읍|면|가|리)$/.test(t[i])) return t[i];
   }
   return t[1] || "";
+}
+
+/* ───────── 블로그 후기 수집 (렌더링 전에 미리) ───────── */
+async function fetchReviews(p) {
+  try {
+    const q = p.place_name + " " + dongOf(p.address_name) + " 후기";
+    const r = await fetch("/api/blog?query=" + encodeURIComponent(q) + "&display=3");
+    if (!r.ok) throw new Error();
+    const data = await r.json();
+    p._reviews = data.reviews || [];
+    p._adFiltered = data.adFiltered || 0;
+    p._reviewError = false;
+  } catch (_) {
+    p._reviews = [];
+    p._adFiltered = 0;
+    p._reviewError = true;
+  }
+}
+
+/* ───────── 키워드 매칭 점수 ───────── */
+function normText(s) {
+  return (s || "").toLowerCase().replace(/\s+/g, "");
+}
+function scorePlace(p, terms) {
+  const name = normText(p.place_name);
+  const cat = normText(p.category_name);
+  let score = 0;
+  for (const t of terms) {
+    if (!t) continue;
+    if (name.includes(t)) score += 4;   // 가게명에 메뉴가 들어가면 가장 강한 신호
+    if (cat.includes(t)) score += 2;    // 카카오 카테고리 문자열
+  }
+  for (const rv of p._reviews || []) {
+    const title = normText(rv.title);
+    const desc = normText(rv.description);
+    for (const t of terms) {
+      if (!t) continue;
+      if (title.includes(t)) score += 3; // 후기 제목에 메뉴명 = 제일 확실한 증거
+      else if (desc.includes(t)) score += 1;
+    }
+  }
+  return score;
 }
 
 function renderPlace(p) {
@@ -520,38 +588,22 @@ function renderPlace(p) {
     </div>
     <div class="reviews">
       <div class="reviews-head"><span>블로그 후기</span><span class="ad-note"></span></div>
-      <div class="review-list"><div class="loading">후기를 불러오는 중…</div></div>
+      <div class="review-list"></div>
     </div>`;
 
   card.querySelector(".place-name").textContent = p.place_name;
   card.querySelector(".place-addr").textContent = road;
-  card.dataset.reviewQuery = p.place_name + " " + dongOf(p.address_name) + " 후기";
-  return card;
-}
 
-/* ───────── 4) 블로그 후기 ───────── */
-async function loadReviews(p) {
-  const card = [...els.results.children].find(
-    (c) => c.querySelector(".place-name").textContent === p.place_name
-  );
-  if (!card) return;
   const list = card.querySelector(".review-list");
   const adNote = card.querySelector(".ad-note");
+  if (p._adFiltered > 0) adNote.textContent = `광고성 글 ${p._adFiltered}건 제외`;
 
-  try {
-    const q = card.dataset.reviewQuery;
-    const r = await fetch("/api/blog?query=" + encodeURIComponent(q) + "&display=3");
-    if (!r.ok) throw new Error();
-    const data = await r.json();
-
-    list.innerHTML = "";
-    if (data.adFiltered > 0) adNote.textContent = `광고성 글 ${data.adFiltered}건 제외`;
-
-    if (!data.reviews || data.reviews.length === 0) {
-      list.innerHTML = '<div class="none">깨끗한 후기를 찾지 못했어요.</div>';
-      return;
-    }
-    data.reviews.forEach((rv) => {
+  if (p._reviewError) {
+    list.innerHTML = '<div class="none">후기를 불러오지 못했어요. (네이버 API 키 설정을 확인해 주세요)</div>';
+  } else if (!p._reviews || p._reviews.length === 0) {
+    list.innerHTML = '<div class="none">깨끗한 후기를 찾지 못했어요.</div>';
+  } else {
+    p._reviews.forEach((rv) => {
       const d = document.createElement("div");
       d.className = "review";
       const date = rv.date ? `${rv.date.slice(0, 4)}.${rv.date.slice(4, 6)}` : "";
@@ -561,9 +613,8 @@ async function loadReviews(p) {
       d.querySelector(".rmeta").textContent = [rv.blogger, date].filter(Boolean).join(" · ");
       list.appendChild(d);
     });
-  } catch (_) {
-    list.innerHTML = '<div class="none">후기를 불러오지 못했어요. (네이버 API 키 설정을 확인해 주세요)</div>';
   }
+  return card;
 }
 </script>
 </body>
