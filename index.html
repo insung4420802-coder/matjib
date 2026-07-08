@@ -241,16 +241,45 @@
   }
   .imm-basis { font-size: 11.5px; color: var(--ink-soft); }
   .imm-basis b { color: var(--kim); font-weight: 700; }
-  .imm-bars { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
-  .imm-bar { font-size: 10.5px; color: var(--ink-soft); display: flex; align-items: center; gap: 4px; }
-  .imm-bar i {
-    display: inline-block; width: 34px; height: 5px; border-radius: 3px;
-    background: var(--line); position: relative; overflow: hidden; font-style: normal;
+  .imm-bars { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; }
+  .imm-bar { display: grid; grid-template-columns: 88px 1fr 26px; align-items: center; gap: 8px; }
+  .imm-bar .ib-label { font-size: 11px; color: var(--ink-soft); }
+  .imm-bar .ib-track {
+    height: 7px; border-radius: 4px; background: #ece7dd; overflow: hidden;
   }
-  .imm-bar i::after {
-    content: ""; position: absolute; left: 0; top: 0; bottom: 0;
-    width: var(--w, 0%); background: var(--kim);
+  .imm-bar .ib-track i {
+    display: block; height: 100%; width: var(--w, 0%);
+    background: linear-gradient(90deg, #7fae8e, var(--kim));
+    border-radius: 4px; transition: width .3s;
   }
+  .imm-bar .ib-val { font-size: 10.5px; color: var(--ink-soft); text-align: right; font-variant-numeric: tabular-nums; }
+
+  /* 1등 배너 & 카드 */
+  .champ-banner {
+    display: flex; align-items: center; gap: 8px;
+    font-family: "Gowun Batang", serif; font-weight: 700; font-size: 15px;
+    color: var(--broth-deep); margin: 18px 0 8px;
+  }
+  .champ-icon { font-size: 20px; }
+  .is-champion {
+    border: 2px solid #e8a13a;
+    box-shadow: 0 4px 18px rgba(232,161,58,.22);
+    position: relative;
+  }
+
+  /* 계층 그룹 헤더 */
+  .tier-head {
+    display: flex; align-items: center; gap: 8px;
+    margin: 22px 2px 4px;
+  }
+  .tier-name {
+    font-family: "Gowun Batang", serif; font-weight: 700; font-size: 15px; color: var(--ink);
+  }
+  .tier-kw {
+    font-size: 12px; font-weight: 700; color: var(--kim);
+    background: var(--kim-soft); border-radius: 6px; padding: 2px 8px;
+  }
+  .tier-count { font-size: 11.5px; color: var(--ink-soft); margin-left: auto; }
 
   /* 필터 바 */
   .filter-bar { display: flex; gap: 6px; margin: 4px 0 2px; flex-wrap: wrap; align-items: center; }
@@ -405,6 +434,8 @@ let manualCenter = null;        // 주소 검색으로 선택한 좌표 {lat, ln
 let postcodeLoaded = false;
 let lastResults = [];           // 마지막 검색 결과(별점 판정 포함)
 let minStars = 0;               // 최소 별점 필터
+let champion = null;            // 선정 1등 맛집
+let currentTiers = null;        // 이번 검색의 계층 {exact,broad,broader}
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -616,8 +647,8 @@ async function runSearch() {
     // 1) 기준 좌표
     const center = await getCenter();
     if (gen !== searchGen) return;
-    // 2) 감성 키워드 → 검색 키워드 + 매칭 동의어 (Claude, 캐시 우선)
-    const { keywords, match, converted } = await convertKeywords(q);
+    // 2) 감성 키워드 → 검색 키워드 + 매칭 동의어 + 계층 (Claude, 캐시 우선)
+    const { keywords, match, tiers, converted } = await convertKeywords(q);
     if (gen !== searchGen) return;
     renderTicket(q, keywords, converted);
     // 3) 카카오 장소 검색 (키워드별 병렬)
@@ -638,6 +669,10 @@ async function runSearch() {
     const maxRel = Math.max(1, ...places.map((p) => p._rel));
     const candidates = places.filter((p) => p._rel > 0);
     if (candidates.length === 0) { showState("none"); return; }
+
+    // 5-1) 계층 분류: exact(정확) / broad(비슷) / broader(계열)
+    candidates.forEach((p) => { p._tier = classifyTier(p, tiers); });
+    currentTiers = tiers;
 
     // 6) 임슐랭 판정 엔드포인트에 후기+적합도 전달 → 별점 산정
     els.loading.innerHTML = '<div class="spinner"></div>광고를 걸러내고 별점을 매기는 중…';
@@ -662,6 +697,7 @@ async function runSearch() {
       );
 
     if (lastResults.length === 0) { showState("none"); return; }
+    champion = pickChampion(lastResults);
     showState(null);
     renderResults();
   } catch (e) {
@@ -722,7 +758,7 @@ function getCenter() {
 
 /* ───────── 2) 키워드 변환 (Claude + localStorage 캐시) ───────── */
 async function convertKeywords(q) {
-  const cacheKey = "kw2:" + q;
+  const cacheKey = "kw3:" + q;
   try {
     const hit = localStorage.getItem(cacheKey);
     if (hit) return JSON.parse(hit);
@@ -738,12 +774,13 @@ async function convertKeywords(q) {
       const data = await r.json();
       if (data.keywords && data.keywords.length) {
         if (!data.match || !data.match.length) data.match = data.keywords;
+        if (!data.tiers) data.tiers = { exact: data.keywords[0], broad: "", broader: "" };
         try { localStorage.setItem(cacheKey, JSON.stringify(data)); } catch (_) {}
         return data;
       }
     }
   } catch (_) {}
-  return { keywords: [q], match: [q], converted: false }; // 변환 실패 시 원문으로 검색
+  return { keywords: [q], match: [q], tiers: { exact: q, broad: "", broader: "" }, converted: false };
 }
 
 function renderTicket(orig, keywords, converted) {
@@ -909,7 +946,7 @@ function renderPlace(p, opts = {}) {
     <div class="links">
       <a class="primary" href="${p.place_url}" target="_blank" rel="noopener">카카오맵</a>
       <a href="https://map.naver.com/p/search/${naverQ}" target="_blank" rel="noopener">네이버지도</a>
-      <a href="https://map.kakao.com/link/to/${nameQ},${p.y},${p.x}" target="_blank" rel="noopener">길찾기</a>
+      <a href="kakaomap://route?ep=${p.y},${p.x}&by=CAR" rel="noopener">카카오내비</a>
       <a href="tmap://route?goalname=${nameQ}&goalx=${p.x}&goaly=${p.y}" rel="noopener">티맵</a>
     </div>
     ${opts.compact ? "" : `
@@ -938,12 +975,20 @@ function renderPlace(p, opts = {}) {
     if (imm.breakdown && !opts.compact) {
       const bars = document.createElement("div");
       bars.className = "imm-bars";
-      const defs = [["적합도", imm.breakdown.relevance], ["진짜밀도", imm.breakdown.authenticity],
-                    ["후기량", imm.breakdown.volume], ["최신성", imm.breakdown.recency]];
+      const defs = [
+        ["메뉴 적합도", imm.breakdown.relevance],
+        ["광고 안 낀 후기", imm.breakdown.authenticity],
+        ["후기 많음", imm.breakdown.volume],
+        ["최근 후기", imm.breakdown.recency],
+      ];
       defs.forEach(([label, v]) => {
-        const b = document.createElement("span");
+        const pct = Math.round((v || 0) * 100);
+        const b = document.createElement("div");
         b.className = "imm-bar";
-        b.innerHTML = `${label} <i style="--w:${Math.round((v || 0) * 100)}%"></i>`;
+        b.innerHTML =
+          `<span class="ib-label">${label}</span>` +
+          `<span class="ib-track"><i style="--w:${pct}%"></i></span>` +
+          `<span class="ib-val">${pct}</span>`;
         bars.appendChild(b);
       });
       ratingEl.after(bars);
@@ -1000,12 +1045,74 @@ function starsEl(stars) {
   return wrap;
 }
 
-/* 결과 렌더 + 최소 별점 필터 */
+/* ───────── 계층 분류 ───────── */
+// 각 장소가 exact / broad / broader 중 어디에 속하는지 판정
+function classifyTier(p, tiers) {
+  if (!tiers) return "broad";
+  const hay = normText(p.place_name) + " " + normText(p.category_name) +
+    " " + (p._reviews || []).map((r) => normText(r.title)).join(" ");
+  const ex = normText(tiers.exact || "");
+  const br = normText(tiers.broad || "");
+  if (ex && hay.includes(ex)) return "exact";
+  if (br && hay.includes(br)) return "broad";
+  return "broader";
+}
+
+/* ───────── 1등 선정 로직 ─────────
+   별점만으로 뽑지 않는다. 1등은 "확실히 검증된" 곳이어야 하므로:
+   - exact 계층 우선 (정확히 그 메뉴를 파는 곳)
+   - 챔피언 점수 = 별점 + 신뢰 보정
+     · 진짜후기 절대량(real)이 충분해야 가산 (후기 1~2개짜리 우연한 5점 배제)
+     · 진짜후기 비율(realPct) 가산
+     · 적합도(relevance) 가산
+   후기가 빈약한 곳은 별점이 높아도 1등이 될 수 없다. */
+function championScore(p) {
+  const imm = p._imm || {};
+  const bd = imm.breakdown || {};
+  const tierBonus = p._tier === "exact" ? 1.0 : p._tier === "broad" ? 0.4 : 0;
+  const realCount = imm.realCount || 0;
+  // 진짜후기 3개 이상이어야 신뢰. 로그로 완만하게.
+  const evidence = Math.min(1, Math.log2(realCount + 1) / Math.log2(6)); // real=5 → 1.0
+  const realPct = (imm.realPct != null ? imm.realPct : 50) / 100;
+  const rel = bd.relevance != null ? bd.relevance : 0.5;
+  return (
+    (imm.stars || 0) * 1.0 +      // 별점 (0~5)
+    tierBonus * 1.5 +             // 정확한 계층일수록 (0~1.5)
+    evidence * 1.5 +             // 후기 증거량 (0~1.5)
+    realPct * 1.0 +              // 진짜후기 비율 (0~1)
+    rel * 0.8                    // 적합도 (0~0.8)
+  );
+}
+function pickChampion(list) {
+  if (!list.length) return null;
+  // 진짜후기가 최소 2개 이상인 곳 중에서만 1등 선정 (증거 부족 배제)
+  const eligible = list.filter((p) => (p._imm.realCount || 0) >= 2);
+  const pool = eligible.length ? eligible : list;
+  return pool.slice().sort((a, b) => championScore(b) - championScore(a))[0];
+}
+
+/* 결과 렌더: 1등 카드 → 필터 → 계층 그룹 */
+const TIER_LABEL = {
+  exact: "정확히 일치",
+  broad: "비슷한 종류",
+  broader: "같은 계열",
+};
 function renderResults() {
   els.results.innerHTML = "";
   const filtered = lastResults.filter((p) => p._imm.stars >= minStars);
 
-  // 필터 바
+  // ── 1등 맛집 카드 (필터와 무관하게 항상 최상단) ──
+  if (champion) {
+    const crown = document.createElement("div");
+    crown.className = "champ-banner";
+    crown.innerHTML = `<span class="champ-icon">👑</span> 임슐랭 선정 1등 맛집`;
+    els.results.appendChild(crown);
+    const champCard = renderPlace(champion, { champion: true });
+    champCard.classList.add("is-champion");
+    els.results.appendChild(champCard);
+  }
+
+  // ── 필터 바 ──
   const bar = document.createElement("div");
   bar.className = "filter-bar";
   bar.innerHTML = '<span class="f-label">최소 별점</span>';
@@ -1018,16 +1125,38 @@ function renderResults() {
   });
   els.results.appendChild(bar);
 
-  const meta = document.createElement("div");
-  meta.className = "result-meta";
-  meta.style.margin = "6px 0 2px";
-  meta.textContent = filtered.length
-    ? `임슐랭 별점 순 · ${filtered.length}곳`
-    : "이 별점 이상인 곳이 없어요. 기준을 낮춰보세요.";
-  els.results.appendChild(meta);
+  // ── 계층별 그룹 (1등은 그룹에서도 표시하되 배지로 중복 안내) ──
+  const order = ["exact", "broad", "broader"];
+  let shown = 0;
+  order.forEach((tier) => {
+    const group = filtered.filter((p) => (p._tier || "broad") === tier);
+    if (!group.length) return;
+    const label = currentTiers && currentTiers[tier];
+    const head = document.createElement("div");
+    head.className = "tier-head";
+    head.innerHTML = `<span class="tier-name">${TIER_LABEL[tier]}</span>` +
+      (label ? `<span class="tier-kw">${escapeHtml(label)}</span>` : "") +
+      `<span class="tier-count">${group.length}곳</span>`;
+    els.results.appendChild(head);
+    group.forEach((p) => {
+      els.results.appendChild(renderPlace(p));
+      shown++;
+    });
+  });
 
-  filtered.forEach((p) => els.results.appendChild(renderPlace(p)));
+  if (shown === 0) {
+    const meta = document.createElement("div");
+    meta.className = "result-meta";
+    meta.style.margin = "10px 0";
+    meta.textContent = "이 별점 이상인 곳이 없어요. 기준을 낮춰보세요.";
+    els.results.appendChild(meta);
+  }
 }
+
+function escapeHtml(s) {
+  return (s || "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+
 </script>
 </body>
 </html>
