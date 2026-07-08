@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<title>임맛따라 — 감성 키워드로 찾는 우리 동네 맛집</title>
+<title>임슐랭 가이드 — 광고 걸러낸 진짜 맛집만</title>
 <meta name="description" content="얼큰한 국물, 시원한 해장 — 말하듯 검색하면 근처 맛집을 후기와 함께 찾아드립니다." />
 
 <!-- ─────────────────────────────────────────────
@@ -228,6 +228,39 @@
     background: #fbeae5; border-radius: 6px; padding: 2px 8px;
   }
   .place-cat { font-size: 12.5px; color: var(--ink-soft); margin-top: 2px; }
+
+  /* ── 임슐랭 별점 ── */
+  .imm-rating { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .imm-stars { font-size: 17px; letter-spacing: 1px; line-height: 1; }
+  .imm-stars .full { color: #e8a13a; }
+  .imm-stars .half { color: #e8a13a; opacity: .55; }
+  .imm-stars .empty { color: #ddd5c8; }
+  .imm-score {
+    font-size: 12px; font-weight: 700; color: var(--broth);
+    background: #fbeae5; border-radius: 6px; padding: 2px 8px;
+  }
+  .imm-basis { font-size: 11.5px; color: var(--ink-soft); }
+  .imm-basis b { color: var(--kim); font-weight: 700; }
+  .imm-bars { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  .imm-bar { font-size: 10.5px; color: var(--ink-soft); display: flex; align-items: center; gap: 4px; }
+  .imm-bar i {
+    display: inline-block; width: 34px; height: 5px; border-radius: 3px;
+    background: var(--line); position: relative; overflow: hidden; font-style: normal;
+  }
+  .imm-bar i::after {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0;
+    width: var(--w, 0%); background: var(--kim);
+  }
+
+  /* 필터 바 */
+  .filter-bar { display: flex; gap: 6px; margin: 4px 0 2px; flex-wrap: wrap; align-items: center; }
+  .filter-bar .f-label { font-size: 12px; color: var(--ink-soft); }
+  .filter-chip {
+    font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer;
+    background: #fff; border: 1.5px solid var(--line); color: var(--ink-soft);
+    border-radius: 999px; padding: 6px 11px;
+  }
+  .filter-chip.on { background: #e8a13a; border-color: #e8a13a; color: #fff; }
   .place-addr { font-size: 13.5px; color: var(--ink-soft); margin-top: 6px; }
   .place-phone { font-size: 13.5px; margin-top: 2px; }
   .place-phone a { color: var(--kim); text-decoration: none; font-weight: 600; }
@@ -289,8 +322,8 @@
   <header>
     <div class="head-row">
       <div>
-        <div class="brand">임맛따라<span class="dot">.</span></div>
-        <div class="tagline">임씨네 입맛따라 — 말하듯 검색하면 근처 맛집을 후기와 함께</div>
+        <div class="brand">임슐랭 가이드<span class="dot">★</span></div>
+        <div class="tagline">광고 걸러낸 진짜 후기로만 별점을 매깁니다</div>
       </div>
       <button id="btnFavs" class="btn-favs" type="button">★ 즐겨찾기 <span id="favCount">0</span></button>
     </div>
@@ -370,6 +403,8 @@ let searching = false;
 let searchGen = 0;              // 검색 세대 토큰 (이전 검색 잔상 방지)
 let manualCenter = null;        // 주소 검색으로 선택한 좌표 {lat, lng, label}
 let postcodeLoaded = false;
+let lastResults = [];           // 마지막 검색 결과(별점 판정 포함)
+let minStars = 0;               // 최소 별점 필터
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -569,6 +604,7 @@ async function runSearch() {
   const gen = ++searchGen; // 이 검색의 세대 번호. 이후 도착하는 옛 응답은 무시
   if (favMode) setFavMode(false); // 즐겨찾기 화면에서 검색하면 검색 화면으로 복귀
   addHistory(q);
+  minStars = 0; // 새 검색마다 필터 초기화
   els.btn.disabled = true;
   els.loading.innerHTML = '<div class="spinner"></div>맛집을 찾는 중이에요…';
   showState("loading");
@@ -591,36 +627,43 @@ async function runSearch() {
 
     if (places.length === 0) { showState("none"); return; }
 
-    // 4) 후보 전체의 블로그 후기를 먼저 수집 (병렬)
-    els.loading.innerHTML = '<div class="spinner"></div>후기를 읽고 진짜 맛집을 고르는 중…';
+    // 4) 후보 전체의 블로그 후기 수집 (병렬)
+    els.loading.innerHTML = '<div class="spinner"></div>후기를 모으는 중…';
     await Promise.all(places.map((p) => fetchReviews(p)));
     if (gen !== searchGen) return;
 
-    // 5) 키워드 매칭 점수로 재랭킹: 이름/카테고리/후기 제목에 매칭어가 없으면 하위로
+    // 5) 키워드 적합도 점수 → 적합도 0인 곳(엉뚱한 업종)은 제외
     const terms = (match && match.length ? match : keywords).map(normText);
-    places.forEach((p) => { p._score = scorePlace(p, terms); });
-    const matched = places.filter((p) => p._score > 0)
-      .sort((a, b) => b._score - a._score || Number(a.distance) - Number(b.distance));
-    const unmatched = places.filter((p) => p._score === 0)
-      .sort((a, b) => Number(a.distance) - Number(b.distance));
+    places.forEach((p) => { p._rel = scorePlace(p, terms); });
+    const maxRel = Math.max(1, ...places.map((p) => p._rel));
+    const candidates = places.filter((p) => p._rel > 0);
+    if (candidates.length === 0) { showState("none"); return; }
 
+    // 6) 임슐랭 판정 엔드포인트에 후기+적합도 전달 → 별점 산정
+    els.loading.innerHTML = '<div class="spinner"></div>광고를 걸러내고 별점을 매기는 중…';
+    const judged = await judgePlaces(candidates, maxRel);
+    if (gen !== searchGen) return;
+
+    // 판정 결과를 각 place에 병합
+    const byId = {};
+    judged.forEach((j) => { byId[j.id] = j; });
+    candidates.forEach((p) => {
+      const j = byId[p.id] || {};
+      p._imm = j;
+    });
+
+    // 별점 높은 순 → 동점이면 점수 → 거리
+    lastResults = candidates
+      .filter((p) => p._imm && typeof p._imm.stars === "number")
+      .sort((a, b) =>
+        b._imm.stars - a._imm.stars ||
+        b._imm.score100 - a._imm.score100 ||
+        Number(a.distance) - Number(b.distance)
+      );
+
+    if (lastResults.length === 0) { showState("none"); return; }
     showState(null);
-    els.resultMeta.textContent =
-      `반경 ${radius / 1000}km · 후기까지 확인한 ${matched.length}곳` +
-      (unmatched.length ? ` (관련성 낮은 ${unmatched.length}곳 제외/하단)` : "");
-
-    matched.forEach((p) => els.results.appendChild(renderPlace(p)));
-
-    // 매칭된 곳이 적을 때만 나머지를 하단에 참고용으로 표시
-    if (matched.length < 3 && unmatched.length) {
-      const div = document.createElement("div");
-      div.className = "result-meta";
-      div.style.marginTop = "10px";
-      div.textContent = "아래는 후기에서 키워드를 확인하지 못한 곳이에요 (참고용)";
-      els.results.appendChild(div);
-      unmatched.slice(0, 5).forEach((p) => els.results.appendChild(renderPlace(p)));
-    }
-    if (matched.length === 0 && unmatched.length === 0) showState("none");
+    renderResults();
   } catch (e) {
     showState(null);
     els.locStatus.textContent = e.message || "검색 중 문제가 발생했어요.";
@@ -767,20 +810,54 @@ function dongOf(addr) {
   return t[1] || "";
 }
 
-/* ───────── 블로그 후기 수집 (렌더링 전에 미리) ───────── */
+/* ───────── 블로그 후기 원시 수집 (판정은 서버가 담당) ───────── */
 async function fetchReviews(p) {
   try {
     const q = p.place_name + " " + dongOf(p.address_name) + " 후기";
-    const r = await fetch("/api/blog?query=" + encodeURIComponent(q) + "&display=3");
+    const r = await fetch("/api/blog?query=" + encodeURIComponent(q));
     if (!r.ok) throw new Error();
     const data = await r.json();
-    p._reviews = data.reviews || [];
-    p._adFiltered = data.adFiltered || 0;
+    p._reviews = data.items || [];
     p._reviewError = false;
   } catch (_) {
     p._reviews = [];
-    p._adFiltered = 0;
     p._reviewError = true;
+  }
+}
+
+/* ───────── 임슐랭 판정 호출 ───────── */
+async function judgePlaces(places, maxRel) {
+  const payload = {
+    maxRelevanceScore: maxRel,
+    places: places.map((p) => ({
+      id: p.id,
+      rawRelevanceScore: p._rel,
+      reviews: (p._reviews || []).map((r) => ({
+        title: r.title, description: r.description,
+        date: r.date, link: r.link, blogger: r.blogger,
+      })),
+    })),
+  };
+  try {
+    const r = await fetch("/api/judge", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) throw new Error();
+    const data = await r.json();
+    return data.results || [];
+  } catch (_) {
+    // 판정 서버 실패 시: 클라이언트에서 최소한의 폴백 (적합도만으로 대략 별점)
+    return places.map((p) => ({
+      id: p.id,
+      stars: Math.max(1, Math.min(5, Math.round((p._rel / maxRel) * 5))),
+      score100: Math.round((p._rel / maxRel) * 60),
+      realPct: null, adCount: 0,
+      totalReviews: (p._reviews || []).length,
+      realReviews: (p._reviews || []).slice(0, 3),
+      breakdown: null,
+    }));
   }
 }
 
@@ -826,6 +903,7 @@ function renderPlace(p, opts = {}) {
       </div>
     </div>
     <div class="place-cat">${shortCat(p.category_name)}</div>
+    <div class="imm-rating"></div>
     <div class="place-addr"></div>
     ${p.phone ? `<div class="place-phone"><a href="tel:${p.phone}">${p.phone}</a></div>` : ""}
     <div class="links">
@@ -836,12 +914,43 @@ function renderPlace(p, opts = {}) {
     </div>
     ${opts.compact ? "" : `
     <div class="reviews">
-      <div class="reviews-head"><span>블로그 후기</span><span class="ad-note"></span></div>
+      <div class="reviews-head"><span>진짜 후기만</span><span class="ad-note"></span></div>
       <div class="review-list"></div>
     </div>`}`;
 
   card.querySelector(".place-name").textContent = p.place_name;
   card.querySelector(".place-addr").textContent = road;
+
+  // 임슐랭 별점 블록
+  const imm = p._imm;
+  const ratingEl = card.querySelector(".imm-rating");
+  if (imm && typeof imm.stars === "number") {
+    ratingEl.appendChild(starsEl(imm.stars));
+    const score = document.createElement("span");
+    score.className = "imm-score"; score.textContent = imm.stars.toFixed(1);
+    ratingEl.appendChild(score);
+    if (imm.realPct != null) {
+      const basis = document.createElement("span");
+      basis.className = "imm-basis";
+      basis.innerHTML = `진짜후기 <b>${imm.realPct}%</b> · ${imm.realCount}/${imm.totalReviews}개`;
+      ratingEl.appendChild(basis);
+    }
+    if (imm.breakdown && !opts.compact) {
+      const bars = document.createElement("div");
+      bars.className = "imm-bars";
+      const defs = [["적합도", imm.breakdown.relevance], ["진짜밀도", imm.breakdown.authenticity],
+                    ["후기량", imm.breakdown.volume], ["최신성", imm.breakdown.recency]];
+      defs.forEach(([label, v]) => {
+        const b = document.createElement("span");
+        b.className = "imm-bar";
+        b.innerHTML = `${label} <i style="--w:${Math.round((v || 0) * 100)}%"></i>`;
+        bars.appendChild(b);
+      });
+      ratingEl.after(bars);
+    }
+  } else {
+    ratingEl.remove();
+  }
 
   const favBtn = card.querySelector(".fav-btn");
   favBtn.classList.toggle("on", isFav(p.id));
@@ -854,14 +963,15 @@ function renderPlace(p, opts = {}) {
 
   const list = card.querySelector(".review-list");
   const adNote = card.querySelector(".ad-note");
-  if (p._adFiltered > 0) adNote.textContent = `광고성 글 ${p._adFiltered}건 제외`;
+  const realReviews = (imm && imm.realReviews) || [];
+  if (imm && imm.adCount > 0) adNote.textContent = `광고성 ${imm.adCount}건 제외`;
 
   if (p._reviewError) {
     list.innerHTML = '<div class="none">후기를 불러오지 못했어요. (네이버 API 키 설정을 확인해 주세요)</div>';
-  } else if (!p._reviews || p._reviews.length === 0) {
-    list.innerHTML = '<div class="none">깨끗한 후기를 찾지 못했어요.</div>';
+  } else if (realReviews.length === 0) {
+    list.innerHTML = '<div class="none">광고를 걸러내니 남는 진짜 후기가 없었어요.</div>';
   } else {
-    p._reviews.forEach((rv) => {
+    realReviews.slice(0, 3).forEach((rv) => {
       const d = document.createElement("div");
       d.className = "review";
       const date = rv.date ? `${rv.date.slice(0, 4)}.${rv.date.slice(4, 6)}` : "";
@@ -873,6 +983,50 @@ function renderPlace(p, opts = {}) {
     });
   }
   return card;
+}
+
+/* 별 아이콘 생성 (0.5 단위) */
+function starsEl(stars) {
+  const wrap = document.createElement("span");
+  wrap.className = "imm-stars";
+  wrap.setAttribute("aria-label", `별 ${stars}개`);
+  for (let i = 1; i <= 5; i++) {
+    const s = document.createElement("span");
+    if (stars >= i) { s.className = "full"; s.textContent = "★"; }
+    else if (stars >= i - 0.5) { s.className = "half"; s.textContent = "★"; }
+    else { s.className = "empty"; s.textContent = "★"; }
+    wrap.appendChild(s);
+  }
+  return wrap;
+}
+
+/* 결과 렌더 + 최소 별점 필터 */
+function renderResults() {
+  els.results.innerHTML = "";
+  const filtered = lastResults.filter((p) => p._imm.stars >= minStars);
+
+  // 필터 바
+  const bar = document.createElement("div");
+  bar.className = "filter-bar";
+  bar.innerHTML = '<span class="f-label">최소 별점</span>';
+  [[0, "전체"], [3, "★3+"], [4, "★4+"], [4.5, "★4.5+"], [5, "★5"]].forEach(([v, label]) => {
+    const b = document.createElement("button");
+    b.className = "filter-chip" + (minStars === v ? " on" : "");
+    b.type = "button"; b.textContent = label;
+    b.addEventListener("click", () => { minStars = v; renderResults(); });
+    bar.appendChild(b);
+  });
+  els.results.appendChild(bar);
+
+  const meta = document.createElement("div");
+  meta.className = "result-meta";
+  meta.style.margin = "6px 0 2px";
+  meta.textContent = filtered.length
+    ? `임슐랭 별점 순 · ${filtered.length}곳`
+    : "이 별점 이상인 곳이 없어요. 기준을 낮춰보세요.";
+  els.results.appendChild(meta);
+
+  filtered.forEach((p) => els.results.appendChild(renderPlace(p)));
 }
 </script>
 </body>
