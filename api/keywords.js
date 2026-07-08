@@ -9,7 +9,7 @@ const SYSTEM_PROMPT = `너는 카카오맵 검색 전문가다. 사용자의 감
 따라서 사용자의 의도를 파악한 뒤, 그 의도를 만족하는 "실제 존재하는 구체적 메뉴명/업종명"으로 바꿔야 한다.
 
 출력 형식 (JSON 객체 하나만, 다른 텍스트 절대 금지):
-{"search":["키워드1",...],"match":["단어1",...]}
+{"search":["키워드1",...],"match":["단어1",...],"tiers":{"exact":"정확메뉴","broad":"상위카테고리","broader":"더큰분류"}}
 
 search 규칙 (2~5개):
 - 각각이 카카오맵 검색창에 쳤을 때 실제 가게가 나오는 단어여야 한다 (구체적 메뉴명 또는 업종명)
@@ -19,23 +19,24 @@ search 규칙 (2~5개):
 match 규칙 (5~12개):
 - 결과 검증용. 가게명/카테고리/블로그 후기 제목과 대조할 단어들
 - 구체적 메뉴명 + 후기 제목에 자주 등장하는 관련 표현("아이랑","해장","키즈")을 섞는다
-- 여기는 감성어가 아닌, 후기 제목에 실제로 쓰이는 단어만
+
+tiers 규칙 (계층 매칭용, 각 1개씩):
+- exact: 사용자가 원한 가장 구체적인 메뉴 (예: "오징어짬뽕")
+- broad: 그 메뉴가 속한 한 단계 위 분류 (예: "짬뽕")
+- broader: 더 큰 음식 분류 (예: "중식")
+- 이 3개는 결과를 "정확히 일치 / 비슷한 종류 / 같은 계열"로 나눠 보여주는 데 쓴다
 
 예시 1
-입력: 낙지 들어간 얼큰한 짬뽕
-출력: {"search":["낙지짬뽕","해물짬뽕","짬뽕"],"match":["낙지짬뽕","짬뽕","낙지","해물","중식당","중국집"]}
+입력: 오징어 들어간 짬뽕
+출력: {"search":["오징어짬뽕","해물짬뽕","짬뽕"],"match":["오징어짬뽕","짬뽕","오징어","해물","중식","중국집"],"tiers":{"exact":"오징어짬뽕","broad":"짬뽕","broader":"중식"}}
 
 예시 2
 입력: 아이가 좋아할만한 맛집
-출력: {"search":["돈까스","김밥","우동","피자","파스타"],"match":["돈까스","김밥","우동","피자","파스타","아이랑","아이와","키즈","어린이","가족"]}
+출력: {"search":["돈까스","김밥","우동","피자","파스타"],"match":["돈까스","김밥","우동","피자","파스타","아이랑","키즈","어린이"],"tiers":{"exact":"돈까스","broad":"분식","broader":"가족외식"}}
 
 예시 3
 입력: 시원하게 해장할 곳
-출력: {"search":["해장국","콩나물국밥","북엇국","복국"],"match":["해장","해장국","국밥","콩나물국밥","북엇국","복국","뼈해장국"]}
-
-예시 4
-입력: 부모님 모시고 가기 좋은 점심
-출력: {"search":["한정식","갈비탕","솥밥","보리굴비"],"match":["한정식","갈비탕","솥밥","보리굴비","부모님","가족모임","상견례","코스"]}`;
+출력: {"search":["해장국","콩나물국밥","북엇국","복국"],"match":["해장","해장국","국밥","콩나물국밥","북엇국"],"tiers":{"exact":"해장국","broad":"국밥","broader":"한식"}}`;
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -48,7 +49,7 @@ export default async function handler(req, res) {
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  const fallback = { keywords: [query.trim()], match: [query.trim()], converted: false };
+  const fallback = { keywords: [query.trim()], match: [query.trim()], tiers: { exact: query.trim(), broad: "", broader: "" }, converted: false };
   if (!apiKey) return res.status(200).json(fallback);
 
   try {
@@ -93,7 +94,14 @@ export default async function handler(req, res) {
     if (keywords.length === 0) return res.status(200).json(fallback);
     for (const k of keywords) if (!match.includes(k)) match.push(k);
 
-    return res.status(200).json({ keywords, match: match.slice(0, 14), converted: true });
+    const t = parsed.tiers || {};
+    const tiers = {
+      exact: (t.exact || keywords[0] || "").trim(),
+      broad: (t.broad || "").trim(),
+      broader: (t.broader || "").trim(),
+    };
+
+    return res.status(200).json({ keywords, match: match.slice(0, 14), tiers, converted: true });
   } catch (e) {
     return res.status(200).json(fallback);
   }
