@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<title>맛집 레이더 — 감성 키워드로 찾는 우리 동네 맛집</title>
+<title>임맛따라 — 감성 키워드로 찾는 우리 동네 맛집</title>
 <meta name="description" content="얼큰한 국물, 시원한 해장 — 말하듯 검색하면 근처 맛집을 후기와 함께 찾아드립니다." />
 
 <!-- ─────────────────────────────────────────────
@@ -46,6 +46,15 @@
 
   /* ── 헤더 ── */
   header { padding: 28px 0 6px; }
+  .head-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+  .btn-favs {
+    font: inherit; font-size: 12.5px; font-weight: 700;
+    background: #fff; color: var(--ink-soft);
+    border: 1.5px solid var(--line); border-radius: 999px;
+    padding: 7px 12px; cursor: pointer; flex-shrink: 0; margin-top: 6px;
+    transition: all .12s;
+  }
+  .btn-favs.on { background: #e8a13a; border-color: #e8a13a; color: #fff; }
   .brand {
     font-family: "Gowun Batang", serif;
     font-weight: 700;
@@ -54,6 +63,31 @@
   }
   .brand .dot { color: var(--broth); }
   .tagline { color: var(--ink-soft); font-size: 13.5px; margin-top: 2px; }
+
+  /* ── 최근 검색 ── */
+  .hist-row { display: none; flex-wrap: wrap; gap: 6px; margin-top: 12px; align-items: center; }
+  .hist-row.show { display: flex; }
+  .hist-label { font-size: 12px; color: var(--ink-soft); }
+  .hist-chip {
+    font: inherit; font-size: 12.5px; cursor: pointer;
+    background: var(--kim-soft); color: var(--kim);
+    border: none; border-radius: 999px; padding: 6px 11px;
+  }
+  .hist-chip:hover { filter: brightness(.95); }
+  .hist-clear {
+    font: inherit; font-size: 11.5px; cursor: pointer;
+    background: none; border: none; color: #b3aa9e; text-decoration: underline;
+  }
+
+  /* ── 즐겨찾기 별 ── */
+  .top-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .fav-btn {
+    background: none; border: none; cursor: pointer;
+    font-size: 21px; line-height: 1; padding: 0 2px;
+    color: #ddd5c8; transition: color .12s, transform .12s;
+  }
+  .fav-btn.on { color: #e8a13a; }
+  .fav-btn:active { transform: scale(1.2); }
 
   /* ── 검색 폼 ── */
   .panel {
@@ -116,6 +150,36 @@
     padding: 11px 13px;
     border: 1.5px solid var(--line); border-radius: 10px; background: #fff;
   }
+  .btn-addr {
+    font: inherit; font-size: 13.5px; font-weight: 700;
+    background: var(--kim); color: #fff;
+    border: none; border-radius: 10px; padding: 0 14px;
+    cursor: pointer; flex-shrink: 0;
+  }
+  .btn-addr:hover { filter: brightness(1.1); }
+
+  /* 주소 검색 오버레이 */
+  .pc-overlay {
+    position: fixed; inset: 0; z-index: 100;
+    background: rgba(33,29,25,.45);
+    display: flex; align-items: center; justify-content: center;
+    padding: 16px;
+  }
+  .pc-box {
+    width: 100%; max-width: 480px;
+    background: #fff; border-radius: 14px; overflow: hidden;
+    box-shadow: 0 12px 40px rgba(0,0,0,.25);
+  }
+  .pc-head {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 12px 16px; font-weight: 700; font-size: 15px;
+    border-bottom: 1px solid var(--line);
+  }
+  .pc-head button {
+    font: inherit; font-size: 16px; background: none; border: none;
+    cursor: pointer; color: var(--ink-soft); padding: 4px 8px;
+  }
+  .pc-embed { width: 100%; height: 440px; }
   .loc-status { font-size: 12.5px; color: var(--kim); margin-top: 8px; }
   .loc-status.err { color: var(--broth); }
 
@@ -222,8 +286,13 @@
 <div class="wrap">
 
   <header>
-    <div class="brand">맛집 레이더<span class="dot">.</span></div>
-    <div class="tagline">말하듯 검색하면, 근처 맛집을 후기와 함께 찾아드려요</div>
+    <div class="head-row">
+      <div>
+        <div class="brand">임맛따라<span class="dot">.</span></div>
+        <div class="tagline">임씨네 입맛따라 — 말하듯 검색하면 근처 맛집을 후기와 함께</div>
+      </div>
+      <button id="btnFavs" class="btn-favs" type="button">★ 즐겨찾기 <span id="favCount">0</span></button>
+    </div>
   </header>
 
   <div id="setupWarn" class="setup-warn">
@@ -252,10 +321,28 @@
     </div>
 
     <div id="locInputRow" class="loc-input-row">
-      <input id="locInput" type="text" placeholder="예) 판교역, 성수동, 강릉 중앙시장" />
+      <input id="locInput" type="text" placeholder="예) 판교역, 성수동 (또는 주소 검색 →)" />
+      <button id="btnAddr" class="btn-addr" type="button">주소 검색</button>
     </div>
     <div id="locStatus" class="loc-status"></div>
+    <div id="histRow" class="hist-row"></div>
   </section>
+
+  <div id="favView" hidden>
+    <div class="result-meta" id="favMeta" style="margin-top:18px"></div>
+    <div class="results" id="favList"></div>
+  </div>
+
+  <!-- 우편번호(주소) 검색 오버레이 -->
+  <div id="postcodeOverlay" class="pc-overlay" hidden>
+    <div class="pc-box">
+      <div class="pc-head">
+        <span>주소 검색</span>
+        <button id="pcClose" type="button" aria-label="닫기">✕</button>
+      </div>
+      <div id="postcodeEmbed" class="pc-embed"></div>
+    </div>
+  </div>
 
   <div id="ticket" class="ticket" aria-live="polite">
     <div class="t-label">주 문 서</div>
@@ -279,15 +366,22 @@
 let kakaoReady = false;
 let placesSvc = null;
 let searching = false;
+let searchGen = 0;              // 검색 세대 토큰 (이전 검색 잔상 방지)
+let manualCenter = null;        // 주소 검색으로 선택한 좌표 {lat, lng, label}
+let postcodeLoaded = false;
 
 const $ = (id) => document.getElementById(id);
 const els = {
   query: $("query"), btn: $("btnSearch"),
   locInputRow: $("locInputRow"), locInput: $("locInput"), locStatus: $("locStatus"),
+  btnAddr: $("btnAddr"), pcOverlay: $("postcodeOverlay"), pcClose: $("pcClose"), pcEmbed: $("postcodeEmbed"),
   ticket: $("ticket"), ticketBody: $("ticketBody"),
   loading: $("stateLoading"), empty: $("stateEmpty"), none: $("stateNone"),
   results: $("results"), resultMeta: $("resultMeta"),
   setupWarn: $("setupWarn"),
+  histRow: $("histRow"),
+  btnFavs: $("btnFavs"), favCount: $("favCount"),
+  favView: $("favView"), favMeta: $("favMeta"), favList: $("favList"),
 };
 
 /* ───────── 카카오 SDK 로드 ───────── */
@@ -324,6 +418,141 @@ document.querySelectorAll('input[name="locmode"]').forEach((r) =>
 els.btn.addEventListener("click", runSearch);
 els.query.addEventListener("keydown", (e) => { if (e.key === "Enter") runSearch(); });
 els.locInput.addEventListener("keydown", (e) => { if (e.key === "Enter") runSearch(); });
+// 사용자가 직접 타이핑하면 주소검색으로 정한 좌표는 무효화
+els.locInput.addEventListener("input", () => { manualCenter = null; });
+
+/* ───────── 최근 검색 히스토리 ───────── */
+const HKEY = "imm_hist";
+function getHist() {
+  try { return JSON.parse(localStorage.getItem(HKEY)) || []; } catch (_) { return []; }
+}
+function addHistory(q) {
+  const h = getHist().filter((x) => x !== q);
+  h.unshift(q);
+  try { localStorage.setItem(HKEY, JSON.stringify(h.slice(0, 8))); } catch (_) {}
+  renderHist();
+}
+function renderHist() {
+  const h = getHist();
+  els.histRow.innerHTML = "";
+  els.histRow.classList.toggle("show", h.length > 0);
+  if (!h.length) return;
+  const label = document.createElement("span");
+  label.className = "hist-label"; label.textContent = "최근";
+  els.histRow.appendChild(label);
+  h.forEach((q) => {
+    const b = document.createElement("button");
+    b.className = "hist-chip"; b.type = "button"; b.textContent = q;
+    b.addEventListener("click", () => { els.query.value = q; runSearch(); });
+    els.histRow.appendChild(b);
+  });
+  const clear = document.createElement("button");
+  clear.className = "hist-clear"; clear.type = "button"; clear.textContent = "지우기";
+  clear.addEventListener("click", () => {
+    try { localStorage.removeItem(HKEY); } catch (_) {}
+    renderHist();
+  });
+  els.histRow.appendChild(clear);
+}
+renderHist();
+
+/* ───────── 즐겨찾기 ───────── */
+const FKEY = "imm_favs";
+let favMode = false;
+function getFavs() {
+  try { return JSON.parse(localStorage.getItem(FKEY)) || {}; } catch (_) { return {}; }
+}
+function setFavs(f) { try { localStorage.setItem(FKEY, JSON.stringify(f)); } catch (_) {} }
+function isFav(id) { return !!getFavs()[id]; }
+function toggleFav(p) {
+  const f = getFavs();
+  if (f[p.id]) delete f[p.id];
+  else f[p.id] = {
+    id: p.id, place_name: p.place_name, category_name: p.category_name,
+    address_name: p.address_name, road_address_name: p.road_address_name,
+    phone: p.phone, place_url: p.place_url, x: p.x, y: p.y,
+    savedAt: Date.now(),
+  };
+  setFavs(f);
+  updateFavCount();
+  if (favMode) renderFavView();
+}
+function updateFavCount() { els.favCount.textContent = Object.keys(getFavs()).length; }
+updateFavCount();
+
+els.btnFavs.addEventListener("click", () => setFavMode(!favMode));
+
+function setFavMode(on) {
+  favMode = on;
+  els.btnFavs.classList.toggle("on", on);
+  els.favView.hidden = !on;
+  // 검색 관련 화면 숨기기/복원
+  [els.results, els.resultMeta, els.ticket].forEach((el) => { el.style.display = on ? "none" : ""; });
+  if (on) {
+    showState(null);
+    renderFavView();
+  } else {
+    if (!els.results.children.length) showState("empty");
+  }
+}
+function renderFavView() {
+  const favs = Object.values(getFavs()).sort((a, b) => b.savedAt - a.savedAt);
+  els.favList.innerHTML = "";
+  els.favMeta.textContent = favs.length
+    ? `저장한 맛집 ${favs.length}곳 (최근 저장 순)`
+    : "아직 저장한 맛집이 없어요. 검색 결과에서 ★을 눌러 저장해 보세요.";
+  favs.forEach((p) => els.favList.appendChild(renderPlace(p, { compact: true })));
+}
+
+/* ───────── 주소 검색 (카카오 우편번호 서비스) ───────── */
+els.btnAddr.addEventListener("click", openPostcode);
+els.pcClose.addEventListener("click", () => { els.pcOverlay.hidden = true; });
+els.pcOverlay.addEventListener("click", (e) => {
+  if (e.target === els.pcOverlay) els.pcOverlay.hidden = true;
+});
+
+function openPostcode() {
+  const start = () => {
+    els.pcOverlay.hidden = false;
+    els.pcEmbed.innerHTML = "";
+    new daum.Postcode({
+      oncomplete: (data) => {
+        const addr = data.roadAddress || data.jibunAddress;
+        els.pcOverlay.hidden = true;
+        geocodeAddress(addr, data.buildingName);
+      },
+      width: "100%",
+      height: "100%",
+    }).embed(els.pcEmbed);
+  };
+
+  if (postcodeLoaded) { start(); return; }
+  const s = document.createElement("script");
+  s.src = "https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js";
+  s.onload = () => { postcodeLoaded = true; start(); };
+  s.onerror = () => {
+    els.locStatus.textContent = "주소 검색 서비스를 불러오지 못했어요. 직접 입력을 사용해 주세요.";
+    els.locStatus.className = "loc-status err";
+  };
+  document.head.appendChild(s);
+}
+
+function geocodeAddress(addr, buildingName) {
+  if (!kakaoReady) return;
+  const geocoder = new kakao.maps.services.Geocoder();
+  geocoder.addressSearch(addr, (result, status) => {
+    if (status === kakao.maps.services.Status.OK && result.length) {
+      const label = buildingName ? `${addr} (${buildingName})` : addr;
+      manualCenter = { lat: Number(result[0].y), lng: Number(result[0].x), label };
+      els.locInput.value = label;
+      els.locStatus.textContent = "기준 위치: " + label;
+      els.locStatus.className = "loc-status";
+    } else {
+      els.locStatus.textContent = "선택한 주소의 좌표를 찾지 못했어요. 다시 시도해 주세요.";
+      els.locStatus.className = "loc-status err";
+    }
+  });
+}
 
 /* ───────── 검색 파이프라인 ───────── */
 async function runSearch() {
@@ -336,6 +565,9 @@ async function runSearch() {
   }
 
   searching = true;
+  const gen = ++searchGen; // 이 검색의 세대 번호. 이후 도착하는 옛 응답은 무시
+  if (favMode) setFavMode(false); // 즐겨찾기 화면에서 검색하면 검색 화면으로 복귀
+  addHistory(q);
   els.btn.disabled = true;
   els.loading.innerHTML = '<div class="spinner"></div>맛집을 찾는 중이에요…';
   showState("loading");
@@ -346,18 +578,22 @@ async function runSearch() {
   try {
     // 1) 기준 좌표
     const center = await getCenter();
+    if (gen !== searchGen) return;
     // 2) 감성 키워드 → 검색 키워드 + 매칭 동의어 (Claude, 캐시 우선)
     const { keywords, match, converted } = await convertKeywords(q);
+    if (gen !== searchGen) return;
     renderTicket(q, keywords, converted);
     // 3) 카카오 장소 검색 (키워드별 병렬)
     const radius = Number(document.querySelector('input[name="radius"]:checked').value);
     const places = await searchPlaces(keywords, center, radius);
+    if (gen !== searchGen) return;
 
     if (places.length === 0) { showState("none"); return; }
 
     // 4) 후보 전체의 블로그 후기를 먼저 수집 (병렬)
     els.loading.innerHTML = '<div class="spinner"></div>후기를 읽고 진짜 맛집을 고르는 중…';
     await Promise.all(places.map((p) => fetchReviews(p)));
+    if (gen !== searchGen) return;
 
     // 5) 키워드 매칭 점수로 재랭킹: 이름/카테고리/후기 제목에 매칭어가 없으면 하위로
     const terms = (match && match.length ? match : keywords).map(normText);
@@ -405,8 +641,13 @@ function getCenter() {
   els.locStatus.className = "loc-status";
 
   if (mode === "manual") {
+    // 주소 검색으로 좌표를 이미 정했다면 그대로 사용
+    if (manualCenter) {
+      els.locStatus.textContent = "기준 위치: " + manualCenter.label;
+      return Promise.resolve({ lat: manualCenter.lat, lng: manualCenter.lng });
+    }
     const text = els.locInput.value.trim();
-    if (!text) throw new Error("기준이 될 장소를 입력해 주세요. (예: 판교역)");
+    if (!text) throw new Error("기준 장소를 입력하거나 '주소 검색'으로 정확한 주소를 선택해 주세요.");
     return new Promise((resolve, reject) => {
       placesSvc.keywordSearch(text, (data, status) => {
         if (status === kakao.maps.services.Status.OK && data.length) {
@@ -484,7 +725,9 @@ function searchPlaces(keywords, center, radius) {
   const loc = new kakao.maps.LatLng(center.lat, center.lng);
   const one = (kw) =>
     new Promise((resolve) => {
-      placesSvc.keywordSearch(
+      // 검색마다 새 인스턴스 사용: 하나의 인스턴스를 병렬 호출하면 응답이 섞일 수 있음
+      const svc = new kakao.maps.services.Places();
+      svc.keywordSearch(
         kw,
         (data, status) => resolve(status === kakao.maps.services.Status.OK ? data : []),
         {
@@ -565,18 +808,21 @@ function scorePlace(p, terms) {
   return score;
 }
 
-function renderPlace(p) {
+function renderPlace(p, opts = {}) {
   const card = document.createElement("article");
   card.className = "place";
 
   const naverQ = encodeURIComponent(p.place_name + " " + dongOf(p.address_name));
-  const bluerQ = encodeURIComponent(p.place_name);
+  const nameQ = encodeURIComponent(p.place_name);
   const road = p.road_address_name || p.address_name;
 
   card.innerHTML = `
     <div class="place-top">
       <div class="place-name"></div>
-      <div class="place-dist">${fmtDist(p.distance)}</div>
+      <div class="top-right">
+        ${p.distance ? `<div class="place-dist">${fmtDist(p.distance)}</div>` : ""}
+        <button class="fav-btn" type="button" aria-label="즐겨찾기 저장/해제">★</button>
+      </div>
     </div>
     <div class="place-cat">${shortCat(p.category_name)}</div>
     <div class="place-addr"></div>
@@ -584,15 +830,26 @@ function renderPlace(p) {
     <div class="links">
       <a class="primary" href="${p.place_url}" target="_blank" rel="noopener">카카오맵</a>
       <a href="https://map.naver.com/p/search/${naverQ}" target="_blank" rel="noopener">네이버지도</a>
-      <a href="https://www.bluer.co.kr/search?query=${bluerQ}" target="_blank" rel="noopener">블루리본</a>
+      <a href="https://map.kakao.com/link/to/${nameQ},${p.y},${p.x}" target="_blank" rel="noopener">길찾기</a>
+      <a href="tmap://route?goalname=${nameQ}&goalx=${p.x}&goaly=${p.y}" rel="noopener">티맵</a>
     </div>
+    ${opts.compact ? "" : `
     <div class="reviews">
       <div class="reviews-head"><span>블로그 후기</span><span class="ad-note"></span></div>
       <div class="review-list"></div>
-    </div>`;
+    </div>`}`;
 
   card.querySelector(".place-name").textContent = p.place_name;
   card.querySelector(".place-addr").textContent = road;
+
+  const favBtn = card.querySelector(".fav-btn");
+  favBtn.classList.toggle("on", isFav(p.id));
+  favBtn.addEventListener("click", () => {
+    toggleFav(p);
+    favBtn.classList.toggle("on", isFav(p.id));
+  });
+
+  if (opts.compact) return card;
 
   const list = card.querySelector(".review-list");
   const adNote = card.querySelector(".ad-note");
