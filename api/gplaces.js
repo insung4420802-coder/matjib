@@ -14,23 +14,35 @@ const FIELDS = [
 
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "s-maxage=1800, stale-while-revalidate");
-  const { query, lat, lng } = req.query;
+  const { query, lat, lng, region, radius } = req.query;
   if (!query) return res.status(400).json({ error: "query가 필요합니다." });
 
   const key = process.env.GOOGLE_MAPS_API_KEY;
   if (!key) return res.status(500).json({ error: "GOOGLE_MAPS_API_KEY를 등록해 주세요." });
 
   try {
+    // 기준 좌표 결정: 명시적 lat/lng > region 지오코딩
+    let center = null;
+    if (lat && lng) {
+      center = { latitude: Number(lat), longitude: Number(lng) };
+    } else if (region) {
+      center = await geocode(region, key); // 지역명 → 좌표
+    }
+
     const body = {
       textQuery: query,
-      languageCode: "ko",       // 가능한 항목은 한국어로
-      regionCode: "KR",
+      languageCode: "ko",
       maxResultCount: 15,
     };
-    if (lat && lng) {
-      body.locationBias = {
-        circle: { center: { latitude: Number(lat), longitude: Number(lng) }, radius: 20000 },
-      };
+
+    // 지역 좌표가 있으면 그 반경 안으로 결과를 "제한"(bias가 아니라 restriction)
+    // → "마제소바"만 보고 캐나다까지 긁어오는 문제를 원천 차단
+    if (center) {
+      const rad = Math.min(50000, Math.max(1000, Number(radius) || 15000));
+      body.locationRestriction = { circle: { center, radius: rad } };
+    } else {
+      // 지역을 못 잡았을 때만 한국 편향(국내 폴백)
+      body.regionCode = "KR";
     }
 
     const r = await fetch("https://places.googleapis.com/v1/places:searchText", {
@@ -90,6 +102,28 @@ export default async function handler(req, res) {
     return res.status(200).json({ places });
   } catch (e) {
     return res.status(500).json({ error: "검색 중 오류", detail: String(e) });
+  }
+}
+
+async function geocode(region, key) {
+  // 별도 Geocoding API 활성화가 필요 없도록 Places searchText로 지역 좌표를 얻는다
+  try {
+    const r = await fetch("https://places.googleapis.com/v1/places:searchText", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": key,
+        "X-Goog-FieldMask": "places.location",
+      },
+      body: JSON.stringify({ textQuery: region, maxResultCount: 1 }),
+    });
+    if (!r.ok) return null;
+    const data = await r.json();
+    const loc = data.places?.[0]?.location;
+    if (loc) return { latitude: loc.latitude, longitude: loc.longitude };
+    return null;
+  } catch (_) {
+    return null;
   }
 }
 
