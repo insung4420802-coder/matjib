@@ -1,52 +1,61 @@
-# 맛집 레이더
+# 임슐랭 가이드
 
-감성 키워드("낙지 들어간 얼큰한 짬뽕")로 검색하면 근처 맛집을 광고 걸러낸 블로그 후기와 함께 보여주는 가족용 검색 도구.
+감성 키워드로 검색하면, **광고를 걸러낸 진짜 후기만으로 별점을 매겨** 근처 맛집을 추천하는 가족용 도구.
+네이버 검색과의 차별점 = "협찬/체험단 후기를 판별해 걸러내고, 4개 축을 종합해 임슐랭 별점(1~5)을 산정".
+
+## 별점 로직 (핵심)
+
+`api/lib/score.js`가 4개 축을 논리적으로 결합한다:
+
+1. **진짜후기 밀도 (authenticity)** — 협찬 아닌 후기 비율. *게이트(곱셈)*로 작동해 광고밭이면 다른 점수가 높아도 별점 상한이 눌린다. 표본이 적으면 베이지안 축소로 신뢰도를 낮춘다.
+2. **후기 양 (volume)** — 진짜 후기 절대량(로그 스케일).
+3. **최신성 (recency)** — 최근 후기 비중. 옛날 후기만 있는 '죽은 맛집'을 거른다.
+4. **키워드 적합도 (relevance)** — 가게명/업종/후기 제목이 검색 의도와 맞는지. 0점(엉뚱한 업종)은 후보에서 제외.
+
+`quality = 0.45·relevance + 0.35·volume + 0.20·recency`, `gate = 0.55 + 0.45·authenticity`,
+`최종점수 = quality × gate` → 별점 환산(깐깐한 컷).
+
+광고 판별은 2단계: (1) 휴리스틱(협찬/원고료/체험단 등 문구 + 내돈내산 신호)으로 즉시 판정,
+(2) `ANTHROPIC_API_KEY`가 있으면 애매한(확률 0.3~0.7) 후기만 골라 Claude가 배치 재판정 → 정확도 향상.
+키가 없거나 실패해도 (1)만으로 정상 작동.
 
 ## 구조
 
 ```
-matjib/
-├── index.html        # 앱 전체 (검색 UI + 카카오 장소 검색)
+├── index.html          # 검색 UI + 카카오 장소검색 + 별점 렌더 + 즐겨찾기/히스토리
 └── api/
-    ├── keywords.js   # Claude Haiku로 감성 키워드 → 실제 메뉴 키워드 변환
-    └── blog.js       # 네이버 블로그 검색 프록시 + 광고성 글 필터링
+    ├── keywords.js     # 감성어 → 실제 메뉴 키워드 변환 (Claude)
+    ├── blog.js         # 네이버 블로그 원시 후기 수집
+    ├── judge.js        # 임슐랭 판정 (휴리스틱 + Claude 재판정)
+    └── lib/score.js    # 별점 엔진 (4축 결합)
 ```
 
-## 설정 순서
-
-### 1. 카카오 (장소 검색)
-1. [developers.kakao.com](https://developers.kakao.com) → 내 애플리케이션 → 애플리케이션 추가
-2. 앱 키에서 **JavaScript 키** 복사 → `index.html` 상단 `KAKAO_JS_KEY`에 붙여넣기
-3. 앱 설정 → 플랫폼 → **Web 플랫폼 등록** → 배포 도메인 입력 (예: `https://내앱.vercel.app`)
-   - 이 도메인 등록이 없으면 SDK가 차단됩니다. 로컬 테스트용으로 `http://localhost:3000`도 함께 등록해두면 편합니다.
-
-### 2. 네이버 (블로그 후기)
-1. [developers.naver.com](https://developers.naver.com) → Application → 애플리케이션 등록
-2. 사용 API: **검색** 선택, 환경: WEB 설정
-3. 발급된 **Client ID / Client Secret**을 Vercel 환경변수로 등록 (아래 4번)
-
-### 3. Claude (키워드 변환 — 선택)
-- 보유한 Anthropic API 키를 Vercel 환경변수로 등록
-- 키가 없거나 호출이 실패해도 앱은 원문 그대로 검색하며 정상 동작합니다
-
-### 4. Vercel 배포
-1. 이 폴더를 GitHub 저장소에 올리고 Vercel에서 Import (또는 vercel.com에서 폴더 직접 업로드)
-2. Settings → Environment Variables에 등록:
-
-| 이름 | 값 |
-|---|---|
-| `NAVER_CLIENT_ID` | 네이버 Client ID |
-| `NAVER_CLIENT_SECRET` | 네이버 Client Secret |
-| `ANTHROPIC_API_KEY` | Anthropic API 키 (선택) |
-
-3. 배포 후 나온 도메인을 카카오 콘솔 Web 플랫폼에 등록 (1-3번)
+## 설정 (변경 없음)
+- `index.html` 상단 `KAKAO_JS_KEY`에 카카오 JavaScript 키
+- Vercel 환경변수: `NAVER_CLIENT_ID`, `NAVER_CLIENT_SECRET`, `ANTHROPIC_API_KEY`(선택), `ANTHROPIC_MODEL`(선택)
+- 배포 도메인을 카카오/네이버 콘솔에 등록
 
 ## 비용
-- 카카오 로컬 / 네이버 검색 API: 무료 쿼터로 충분
-- Claude Haiku: 검색 1회당 1원 미만. 같은 검색어는 localStorage에 캐시되어 재호출하지 않음
-- Vercel: 무료 티어
+- 카카오/네이버: 무료 쿼터
+- Claude: 검색당 키워드 변환 1회 + 애매한 후기 배치 판정 1회(있을 때만). 최대 40개 후기로 상한. Haiku 기준 검색당 수 원.
 
-## 참고
-- 위치 권한을 거부했거나 GPS가 애매한 곳에서는 "직접 입력" 모드로 지역명/역 이름을 기준으로 검색하세요
-- 광고 필터는 후기 제목·요약에 협찬/원고료/체험단 등 문구가 있으면 제외하는 방식이라 100%는 아닙니다 (본문 전체는 API로 제공되지 않음)
-- 후기 API는 브라우저에서 직접 호출이 안 되므로, 로컬에서 파일만 열면 후기가 안 뜹니다. `npx vercel dev`로 실행하거나 배포 후 테스트하세요
+## 한계
+- 카카오맵/네이버 **평점 숫자는 공식 API로 제공되지 않아** 사용하지 않는다. 임슐랭 별점은 후기 신뢰도 기반 자체 지표다.
+- 광고 판별은 네이버가 주는 제목+요약 텍스트 기반이라 100%는 아니다(본문 전체는 API 미제공).
+- 후기 API는 서버리스 함수 경유라, 로컬에서 파일만 열면 별점/후기가 안 뜬다. `npx vercel dev` 또는 배포 후 테스트.
+
+## 해외 모드 (신규)
+
+왼쪽 상단 국내/해외 토글. 해외 선택 시:
+- `api/keywords.js`가 "오사카 소바 맛집"을 지역(Osaka)+메뉴(soba/そば)로 분해 (한국어/영어 입력 모두 처리)
+- `api/gplaces.js`가 구글 Places 텍스트 검색으로 현지 맛집+평점+리뷰 수집, 현지어 리뷰는 Claude가 한국어 번역
+- `api/blog.js`로 한국인 블로그 후기도 병행 수집
+- `api/judge-overseas.js` + `score.js`의 `evaluateOverseasPlace`가 구글 평점(베이지안 보정: 리뷰 적은 고평점=관광객 함정 배제) + 리뷰 수 + 한국인 화제성 + 적합도를 종합해 별점 산정
+- 길찾기는 구글맵 연결
+
+### 구글 Places API 설정
+1. [console.cloud.google.com](https://console.cloud.google.com) → 프로젝트 생성
+2. **Places API (New)** 사용 설정
+3. 사용자 인증 정보 → API 키 생성
+4. **결제 계정 연결 필수** (신용카드). 월 $200 무료 크레딧으로 가족용은 실질 무료
+5. Vercel 환경변수 `GOOGLE_MAPS_API_KEY`에 등록
