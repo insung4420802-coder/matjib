@@ -316,6 +316,9 @@
   .g-rating .g-star { color: #f4b400; }
   .g-count { font-weight: 500; color: var(--ink-soft); }
   .review .tr-ko { color: var(--ink); }
+  a.g-review { display: block; text-decoration: none; border-radius: 8px; padding: 4px; margin: 0 -4px; transition: background .12s; }
+  a.g-review:hover { background: #eaf1fd; }
+  a.g-review .rmeta { color: #1a73e8; }
   .review .tr-orig { color: #a89f93; font-size: 11.5px; margin-top: 2px; font-style: italic; }
   .review .tr-badge {
     display: inline-block; font-size: 10px; font-weight: 700; color: #1a73e8;
@@ -647,9 +650,9 @@ function setSearchMode(mode) {
     : "광고 걸러낸 진짜 후기로만 별점을 매깁니다";
   els.query.placeholder = ovs ? "예) 소바, 라멘, 스프카레" : "예) 낙지 들어간 얼큰한 짬뽕";
 
-  // 반경 옵션: 국내 전용 (해외는 지역 텍스트 검색이라 반경 개념이 다름)
+  // 반경 옵션: 국내는 항상, 해외는 '현재 위치' 모드일 때 의미 있음 → 둘 다 표시
   const radiusOpts = document.querySelector('.options[aria-label="검색 반경"]');
-  if (radiusOpts) radiusOpts.style.display = ovs ? "none" : "";
+  if (radiusOpts) radiusOpts.style.display = "";
 
   // 위치 모드 라벨을 모드에 맞게
   const gpsSpan = els.modeGpsLabel;
@@ -851,23 +854,24 @@ async function runDomesticSearch(q, gen) {
 
 /* ───────── 해외 검색 파이프라인 ───────── */
 async function runOverseasSearch(q, gen) {
-  // 위치 모드 확인: 'manual'이면 사용자가 입력/선택한 지역을 메뉴와 합친다
   const locMode = document.querySelector('input[name="locmode"]:checked').value;
-  const region = els.locInput.value.trim();
-  let searchInput = q;
+  const userRegion = els.locInput.value.trim();
   let coords = null;
+  let regionForSearch = "";      // 구글 검색 제한에 쓸 지역명
+  let searchInput = q;
+  const radius = Number(document.querySelector('input[name="radius"]:checked').value) || 15000;
 
   if (locMode === "manual") {
-    if (!region) {
+    if (!userRegion) {
       showState(null);
       els.locStatus.textContent = "지역을 입력하거나 아래 지역 버튼을 눌러주세요. (예: 오사카 난바)";
       els.locStatus.className = "loc-status err";
       return;
     }
-    // "소바" + "오사카 난바" → "오사카 난바 소바"
-    searchInput = region + " " + q;
+    regionForSearch = userRegion;          // "도쿄역" → 구글이 이 좌표 근처로 제한
+    searchInput = userRegion + " " + q;    // Claude 분해용
   } else {
-    // 현재 위치(현지) 기반
+    // 현재 위치(현지) 기반 — 국내처럼 반경 검색
     els.loading.innerHTML = '<div class="spinner"></div>현재 위치를 확인하는 중…';
     try { coords = await getGpsQuietly(); }
     catch (_) {
@@ -884,9 +888,12 @@ async function runOverseasSearch(q, gen) {
   renderTicket(searchInput, conv.gquery, conv.converted);
   currentTiers = conv.tiers;
 
-  // 2) 구글 Places 텍스트 검색 (gquery별 병렬)
+  // 지역 제한 문자열: 사용자가 명시한 지역 우선, 없으면 Claude가 뽑은 region
+  const restrictRegion = regionForSearch || conv.region || "";
+
+  // 2) 구글 Places 검색 — 지역 좌표로 결과를 제한(캐나다 마제소바 방지)
   els.loading.innerHTML = '<div class="spinner"></div>구글맵에서 찾는 중…';
-  const gResults = await gplacesSearch(conv.gquery, coords);
+  const gResults = await gplacesSearch(conv.gquery, coords, restrictRegion, radius);
   if (gen !== searchGen) return;
   if (gResults.length === 0) { showState("none"); return; }
 
@@ -952,10 +959,12 @@ function getGpsQuietly() {
   });
 }
 
-async function gplacesSearch(gquery, coords) {
+async function gplacesSearch(gquery, coords, region, radius) {
   const one = async (qq) => {
     let url = "/api/gplaces?query=" + encodeURIComponent(qq);
     if (coords) url += `&lat=${coords.lat}&lng=${coords.lng}`;
+    else if (region) url += `&region=${encodeURIComponent(region)}`;
+    if (radius) url += `&radius=${radius}`;
     try {
       const r = await fetch(url);
       if (!r.ok) return [];
@@ -1399,19 +1408,23 @@ function renderOverseasReviews(list, p, krRealReviews) {
   const gReviews = p.reviews || []; // 구글 현지 리뷰 (gplaces가 넣어줌)
 
   if (gReviews.length) {
+    const gmapLink = p.mapUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.name || "")}`;
     const head = document.createElement("div");
     head.className = "rmeta"; head.style.fontWeight = "700"; head.style.marginBottom = "4px";
     head.textContent = "현지 리뷰";
     list.appendChild(head);
     gReviews.slice(0, 2).forEach((rv) => {
-      const d = document.createElement("div");
-      d.className = "review";
+      const d = document.createElement("a");
+      d.className = "review g-review";
+      d.href = gmapLink;
+      d.target = "_blank";
+      d.rel = "noopener";
       const ko = rv.textKo || (rv.lang && rv.lang.startsWith("ko") ? rv.text : "");
       const showKo = ko || rv.text || "";
       d.innerHTML =
         `<div class="tr-ko">${rv.textKo ? '<span class="tr-badge">번역</span>' : ""}${escapeHtml(showKo.slice(0, 180))}</div>` +
         (rv.textKo ? `<div class="tr-orig">${escapeHtml((rv.text || "").slice(0, 120))}</div>` : "") +
-        `<div class="rmeta">${escapeHtml(rv.author || "")}${rv.rating ? " · ★" + rv.rating : ""}${rv.time ? " · " + escapeHtml(rv.time) : ""}</div>`;
+        `<div class="rmeta">${escapeHtml(rv.author || "")}${rv.rating ? " · ★" + rv.rating : ""}${rv.time ? " · " + escapeHtml(rv.time) : ""} · 구글맵에서 보기 →</div>`;
       list.appendChild(d);
     });
   }
