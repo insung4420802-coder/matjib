@@ -47,6 +47,16 @@
   /* ── 헤더 ── */
   header { padding: 28px 0 6px; }
   .head-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+  .mode-toggle {
+    display: inline-flex; gap: 0; margin-bottom: 10px;
+    border: 1.5px solid var(--line); border-radius: 999px; overflow: hidden; background: #fff;
+  }
+  .mode-btn {
+    font: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+    background: none; border: none; color: var(--ink-soft);
+    padding: 7px 16px; transition: all .12s;
+  }
+  .mode-btn.on { background: var(--broth); color: #fff; }
   .btn-favs {
     font: inherit; font-size: 12.5px; font-weight: 700;
     background: #fff; color: var(--ink-soft);
@@ -143,20 +153,36 @@
   }
   .divider-dot { color: var(--line); }
 
-  .loc-input-row { display: none; margin-top: 10px; gap: 8px; }
-  .loc-input-row.show { display: flex; }
-  .loc-input-row input {
-    flex: 1; min-width: 0; font: inherit; font-size: 15px;
-    padding: 11px 13px;
-    border: 1.5px solid var(--line); border-radius: 10px; background: #fff;
+  .loc-input-row { display: none; margin-top: 10px; }
+  .loc-input-row.show { display: block; }
+  .loc-input-inner {
+    background: #f0f5f1; border: 1.5px solid #cfe0d4; border-radius: 12px; padding: 12px;
   }
-  .btn-addr {
+  .loc-hint { font-size: 12.5px; color: var(--kim); font-weight: 700; margin-bottom: 8px; }
+  .loc-hint span { font-weight: 500; color: var(--ink-soft); margin-left: 4px; }
+  .loc-input-line { display: flex; gap: 8px; }
+  .loc-input-line input {
+    flex: 1; min-width: 0; font: inherit; font-size: 16px;
+    padding: 11px 13px; border: 1.5px solid var(--line); border-radius: 10px; background: #fff;
+  }
+  .btn-here {
     font: inherit; font-size: 13.5px; font-weight: 700;
-    background: var(--kim); color: #fff;
-    border: none; border-radius: 10px; padding: 0 14px;
-    cursor: pointer; flex-shrink: 0;
+    background: var(--kim); color: #fff; border: none; border-radius: 10px;
+    padding: 0 14px; cursor: pointer; flex-shrink: 0;
   }
-  .btn-addr:hover { filter: brightness(1.1); }
+  .btn-here:hover { filter: brightness(1.08); }
+  .loc-quick { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .loc-quick button {
+    font: inherit; font-size: 12.5px; cursor: pointer;
+    background: #fff; border: 1.5px solid #cfe0d4; color: var(--kim);
+    border-radius: 999px; padding: 5px 11px;
+  }
+  .loc-quick button:hover { background: var(--kim-soft); }
+  .btn-addr-link {
+    font: inherit; font-size: 12px; cursor: pointer; margin-top: 10px;
+    background: none; border: none; color: var(--ink-soft); text-decoration: underline; padding: 0;
+  }
+  .btn-addr-link:hover { color: var(--kim); }
 
   /* 주소 검색 오버레이 */
   .pc-overlay {
@@ -281,6 +307,21 @@
   }
   .tier-count { font-size: 11.5px; color: var(--ink-soft); margin-left: auto; }
 
+  /* 구글 평점 배지 (해외) */
+  .g-rating {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 12.5px; font-weight: 700; color: #1a73e8;
+    background: #eaf1fd; border-radius: 6px; padding: 3px 9px; margin-top: 8px;
+  }
+  .g-rating .g-star { color: #f4b400; }
+  .g-count { font-weight: 500; color: var(--ink-soft); }
+  .review .tr-ko { color: var(--ink); }
+  .review .tr-orig { color: #a89f93; font-size: 11.5px; margin-top: 2px; font-style: italic; }
+  .review .tr-badge {
+    display: inline-block; font-size: 10px; font-weight: 700; color: #1a73e8;
+    background: #eaf1fd; border-radius: 4px; padding: 1px 6px; margin-right: 5px; font-style: normal;
+  }
+
   /* 필터 바 */
   .filter-bar { display: flex; gap: 6px; margin: 4px 0 2px; flex-wrap: wrap; align-items: center; }
   .filter-bar .f-label { font-size: 12px; color: var(--ink-soft); }
@@ -351,8 +392,12 @@
   <header>
     <div class="head-row">
       <div>
+        <div class="mode-toggle" role="radiogroup" aria-label="검색 모드">
+          <button id="modeDom" class="mode-btn on" type="button">🇰🇷 국내</button>
+          <button id="modeOvs" class="mode-btn" type="button">✈️ 해외</button>
+        </div>
         <div class="brand">임슐랭 가이드<span class="dot">★</span></div>
-        <div class="tagline">광고 걸러낸 진짜 후기로만 별점을 매깁니다</div>
+        <div class="tagline" id="tagline">광고 걸러낸 진짜 후기로만 별점을 매깁니다</div>
       </div>
       <button id="btnFavs" class="btn-favs" type="button">★ 즐겨찾기 <span id="favCount">0</span></button>
     </div>
@@ -379,13 +424,20 @@
 
     <div class="options" role="radiogroup" aria-label="기준 위치">
       <span class="opt-label">위치</span>
-      <label class="chip"><input type="radio" name="locmode" value="gps" checked><span>내 위치</span></label>
-      <label class="chip"><input type="radio" name="locmode" value="manual"><span>직접 입력</span></label>
+      <label class="chip"><input type="radio" name="locmode" value="gps" checked><span id="modeGpsLabel">📍 내 위치</span></label>
+      <label class="chip"><input type="radio" name="locmode" value="manual"><span id="modeManualLabel">🔍 장소로 검색</span></label>
     </div>
 
     <div id="locInputRow" class="loc-input-row">
-      <input id="locInput" type="text" placeholder="예) 판교역, 성수동 (또는 주소 검색 →)" />
-      <button id="btnAddr" class="btn-addr" type="button">주소 검색</button>
+      <div class="loc-input-inner">
+        <div class="loc-hint" id="locHint">역·동네 이름을 입력하세요 <span>예: 판교역, 강남역, 성수동</span></div>
+        <div class="loc-input-line">
+          <input id="locInput" type="text" placeholder="예) 판교역" enterkeyhint="search" />
+          <button id="btnSearchHere" class="btn-here" type="button">이 위치로 찾기</button>
+        </div>
+        <div class="loc-quick" id="locQuick"></div>
+        <button id="btnAddr" class="btn-addr-link" type="button">정확한 도로명 주소로 찾기 →</button>
+      </div>
     </div>
     <div id="locStatus" class="loc-status"></div>
     <div id="histRow" class="hist-row"></div>
@@ -436,12 +488,14 @@ let lastResults = [];           // 마지막 검색 결과(별점 판정 포함)
 let minStars = 0;               // 최소 별점 필터
 let champion = null;            // 선정 1등 맛집
 let currentTiers = null;        // 이번 검색의 계층 {exact,broad,broader}
+let searchMode = "domestic";    // "domestic" | "overseas"
 
 const $ = (id) => document.getElementById(id);
 const els = {
   query: $("query"), btn: $("btnSearch"),
   locInputRow: $("locInputRow"), locInput: $("locInput"), locStatus: $("locStatus"),
-  btnAddr: $("btnAddr"), pcOverlay: $("postcodeOverlay"), pcClose: $("pcClose"), pcEmbed: $("postcodeEmbed"),
+  btnAddr: $("btnAddr"), btnSearchHere: $("btnSearchHere"), locQuick: $("locQuick"),
+  modeGpsLabel: $("modeGpsLabel"), modeManualLabel: $("modeManualLabel"), locHint: $("locHint"), pcOverlay: $("postcodeOverlay"), pcClose: $("pcClose"), pcEmbed: $("postcodeEmbed"),
   ticket: $("ticket"), ticketBody: $("ticketBody"),
   loading: $("stateLoading"), empty: $("stateEmpty"), none: $("stateNone"),
   results: $("results"), resultMeta: $("resultMeta"),
@@ -449,6 +503,7 @@ const els = {
   histRow: $("histRow"),
   btnFavs: $("btnFavs"), favCount: $("favCount"),
   favView: $("favView"), favMeta: $("favMeta"), favList: $("favList"),
+  modeDom: $("modeDom"), modeOvs: $("modeOvs"), tagline: $("tagline"),
 };
 
 /* ───────── 카카오 SDK 로드 ───────── */
@@ -478,13 +533,40 @@ document.querySelectorAll('input[name="locmode"]').forEach((r) =>
     const manual = document.querySelector('input[name="locmode"]:checked').value === "manual";
     els.locInputRow.classList.toggle("show", manual);
     els.locStatus.textContent = "";
-    if (manual) els.locInput.focus();
+    if (manual) { renderLocQuick(); els.locInput.focus(); }
   })
 );
+
+// 자주 쓰는 장소 칩 (모드별)
+const QUICK_DOMESTIC = ["판교역", "강남역", "종로3가", "왕십리역", "홍대입구역", "잠실역"];
+const QUICK_OVERSEAS = ["도쿄역", "오사카 난바", "삿포로", "후쿠오카", "다낭", "방콕"];
+function renderLocQuick() {
+  const list = searchMode === "overseas" ? QUICK_OVERSEAS : QUICK_DOMESTIC;
+  els.locQuick.innerHTML = "";
+  list.forEach((name) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.textContent = name;
+    b.addEventListener("click", () => {
+      els.locInput.value = name;
+      manualCenter = null;
+      // 지역 칩을 누르면 위치모드를 '장소로 검색'으로
+      const manualRadio = document.querySelector('input[name="locmode"][value="manual"]');
+      if (manualRadio) manualRadio.checked = true;
+      els.locInputRow.classList.add("show");
+      if (els.query.value.trim()) runSearch();
+      else els.query.focus();
+    });
+    els.locQuick.appendChild(b);
+  });
+}
 
 els.btn.addEventListener("click", runSearch);
 els.query.addEventListener("keydown", (e) => { if (e.key === "Enter") runSearch(); });
 els.locInput.addEventListener("keydown", (e) => { if (e.key === "Enter") runSearch(); });
+els.btnSearchHere.addEventListener("click", () => {
+  if (els.query.value.trim()) runSearch();
+  else { els.locStatus.textContent = "먼저 위에 먹고 싶은 메뉴를 입력해 주세요."; els.locStatus.className = "loc-status err"; els.query.focus(); }
+});
 // 사용자가 직접 타이핑하면 주소검색으로 정한 좌표는 무효화
 els.locInput.addEventListener("input", () => { manualCenter = null; });
 
@@ -535,9 +617,14 @@ function toggleFav(p) {
   const f = getFavs();
   if (f[p.id]) delete f[p.id];
   else f[p.id] = {
-    id: p.id, place_name: p.place_name, category_name: p.category_name,
+    id: p.id,
+    // 국내(카카오)
+    place_name: p.place_name, category_name: p.category_name,
     address_name: p.address_name, road_address_name: p.road_address_name,
     phone: p.phone, place_url: p.place_url, x: p.x, y: p.y,
+    // 해외(구글)
+    name: p.name, category: p.category, address: p.address,
+    lat: p.lat, lng: p.lng, rating: p.rating, ratingCount: p.ratingCount, mapUrl: p.mapUrl,
     savedAt: Date.now(),
   };
   setFavs(f);
@@ -548,6 +635,49 @@ function updateFavCount() { els.favCount.textContent = Object.keys(getFavs()).le
 updateFavCount();
 
 els.btnFavs.addEventListener("click", () => setFavMode(!favMode));
+
+/* ───────── 국내/해외 모드 전환 ───────── */
+function setSearchMode(mode) {
+  searchMode = mode;
+  const ovs = mode === "overseas";
+  els.modeDom.classList.toggle("on", !ovs);
+  els.modeOvs.classList.toggle("on", ovs);
+  els.tagline.textContent = ovs
+    ? "구글 평점 + 한국인 후기로 해외 맛집을 찾아요"
+    : "광고 걸러낸 진짜 후기로만 별점을 매깁니다";
+  els.query.placeholder = ovs ? "예) 소바, 라멘, 스프카레" : "예) 낙지 들어간 얼큰한 짬뽕";
+
+  // 반경 옵션: 국내 전용 (해외는 지역 텍스트 검색이라 반경 개념이 다름)
+  const radiusOpts = document.querySelector('.options[aria-label="검색 반경"]');
+  if (radiusOpts) radiusOpts.style.display = ovs ? "none" : "";
+
+  // 위치 모드 라벨을 모드에 맞게
+  const gpsSpan = els.modeGpsLabel;
+  const manualSpan = els.modeManualLabel;
+  if (gpsSpan) gpsSpan.textContent = ovs ? "📍 현재 위치(현지)" : "📍 내 위치";
+  if (manualSpan) manualSpan.textContent = ovs ? "🌏 지역으로 검색" : "🔍 장소로 검색";
+
+  // 위치 입력 힌트/칩 갱신
+  els.locHint.innerHTML = ovs
+    ? '도시·지역 이름을 입력하세요 <span>예: 오사카 난바, 도쿄역, 삿포로</span>'
+    : '역·동네 이름을 입력하세요 <span>예: 판교역, 강남역, 성수동</span>';
+  els.locInput.placeholder = ovs ? "예) 오사카 난바" : "예) 판교역";
+  els.btnAddr.style.display = ovs ? "none" : ""; // 도로명 주소검색은 국내만
+  els.locQuick.innerHTML = "";
+  renderLocQuick();
+
+  // 모드 전환 시 입력값/상태 초기화
+  manualCenter = null;
+  els.locInput.value = "";
+  els.locStatus.textContent = "";
+  // 기본은 '내 위치'로 리셋
+  const gpsRadio = document.querySelector('input[name="locmode"][value="gps"]');
+  if (gpsRadio) gpsRadio.checked = true;
+  els.locInputRow.classList.remove("show");
+}
+els.modeDom.addEventListener("click", () => setSearchMode("domestic"));
+els.modeOvs.addEventListener("click", () => setSearchMode("overseas"));
+setSearchMode("domestic"); // 초기 라벨/칩 설정
 
 function setFavMode(on) {
   favMode = on;
@@ -625,7 +755,7 @@ function geocodeAddress(addr, buildingName) {
 async function runSearch() {
   const q = els.query.value.trim();
   if (!q || searching) return;
-  if (!kakaoReady) {
+  if (searchMode === "domestic" && !kakaoReady) {
     els.locStatus.textContent = "지도 서비스를 아직 불러오는 중이에요. 잠시 후 다시 시도해 주세요.";
     els.locStatus.className = "loc-status err";
     return;
@@ -644,6 +774,22 @@ async function runSearch() {
   els.ticket.classList.remove("show");
 
   try {
+    if (searchMode === "overseas") {
+      await runOverseasSearch(q, gen);
+    } else {
+      await runDomesticSearch(q, gen);
+    }
+  } catch (e) {
+    showState(null);
+    els.locStatus.textContent = e.message || "검색 중 문제가 발생했어요.";
+    els.locStatus.className = "loc-status err";
+  } finally {
+    if (gen === searchGen) { searching = false; els.btn.disabled = false; }
+  }
+}
+
+async function runDomesticSearch(q, gen) {
+  {
     // 1) 기준 좌표
     const center = await getCenter();
     if (gen !== searchGen) return;
@@ -700,14 +846,198 @@ async function runSearch() {
     champion = pickChampion(lastResults);
     showState(null);
     renderResults();
-  } catch (e) {
-    showState(null);
-    els.locStatus.textContent = e.message || "검색 중 문제가 발생했어요.";
-    els.locStatus.className = "loc-status err";
-  } finally {
-    searching = false;
-    els.btn.disabled = false;
   }
+}
+
+/* ───────── 해외 검색 파이프라인 ───────── */
+async function runOverseasSearch(q, gen) {
+  // 위치 모드 확인: 'manual'이면 사용자가 입력/선택한 지역을 메뉴와 합친다
+  const locMode = document.querySelector('input[name="locmode"]:checked').value;
+  const region = els.locInput.value.trim();
+  let searchInput = q;
+  let coords = null;
+
+  if (locMode === "manual") {
+    if (!region) {
+      showState(null);
+      els.locStatus.textContent = "지역을 입력하거나 아래 지역 버튼을 눌러주세요. (예: 오사카 난바)";
+      els.locStatus.className = "loc-status err";
+      return;
+    }
+    // "소바" + "오사카 난바" → "오사카 난바 소바"
+    searchInput = region + " " + q;
+  } else {
+    // 현재 위치(현지) 기반
+    els.loading.innerHTML = '<div class="spinner"></div>현재 위치를 확인하는 중…';
+    try { coords = await getGpsQuietly(); }
+    catch (_) {
+      showState(null);
+      els.locStatus.textContent = "현재 위치를 가져오지 못했어요. '🌏 지역으로 검색'으로 도시명을 입력해 주세요.";
+      els.locStatus.className = "loc-status err";
+      return;
+    }
+  }
+
+  // 1) 지역+메뉴 분해 (Claude)
+  const conv = await convertKeywordsOverseas(searchInput);
+  if (gen !== searchGen) return;
+  renderTicket(searchInput, conv.gquery, conv.converted);
+  currentTiers = conv.tiers;
+
+  // 2) 구글 Places 텍스트 검색 (gquery별 병렬)
+  els.loading.innerHTML = '<div class="spinner"></div>구글맵에서 찾는 중…';
+  const gResults = await gplacesSearch(conv.gquery, coords);
+  if (gen !== searchGen) return;
+  if (gResults.length === 0) { showState("none"); return; }
+
+  // 3) 한국인 블로그 후기 수집 (가게명+지역 기준, 병렬)
+  els.loading.innerHTML = '<div class="spinner"></div>한국인 후기를 모으는 중…';
+  await Promise.all(gResults.map((p) => fetchKrReviews(p, conv)));
+  if (gen !== searchGen) return;
+
+  // 4) 적합도 + 계층
+  const terms = (conv.match && conv.match.length ? conv.match : conv.gquery).map(normText);
+  gResults.forEach((p) => { p._rel = scoreOverseasPlace(p, terms); });
+  const maxRel = Math.max(1, ...gResults.map((p) => p._rel));
+  const candidates = gResults.filter((p) => p._rel > 0);
+  if (candidates.length === 0) { showState("none"); return; }
+  candidates.forEach((p) => { p._tier = classifyTierOverseas(p, conv.tiers); });
+
+  // 5) 해외 판정 (구글 평점 + 한국인 후기)
+  els.loading.innerHTML = '<div class="spinner"></div>평점을 종합하는 중…';
+  const judged = await judgeOverseas(candidates, maxRel);
+  if (gen !== searchGen) return;
+  const byId = {};
+  judged.forEach((j) => { byId[j.id] = j; });
+  candidates.forEach((p) => { p._imm = byId[p.id] || {}; });
+
+  lastResults = candidates
+    .filter((p) => p._imm && typeof p._imm.stars === "number")
+    .sort((a, b) => b._imm.stars - a._imm.stars || b._imm.score100 - a._imm.score100);
+
+  if (lastResults.length === 0) { showState("none"); return; }
+  champion = pickChampion(lastResults);
+  showState(null);
+  renderResults();
+}
+
+async function convertKeywordsOverseas(q) {
+  const cacheKey = "ovs1:" + q;
+  try { const hit = localStorage.getItem(cacheKey); if (hit) return JSON.parse(hit); } catch (_) {}
+  try {
+    const r = await fetch("/api/keywords", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query: q, mode: "overseas" }),
+    });
+    if (r.ok) {
+      const data = await r.json();
+      if (data.gquery && data.gquery.length) {
+        if (!data.tiers) data.tiers = { exact: data.gquery[0], broad: "", broader: "" };
+        try { localStorage.setItem(cacheKey, JSON.stringify(data)); } catch (_) {}
+        return data;
+      }
+    }
+  } catch (_) {}
+  return { region: "", gquery: [q], krquery: q, match: [q], tiers: { exact: q, broad: "", broader: "" }, converted: false };
+}
+
+function getGpsQuietly() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) return reject();
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => reject(),
+      { enableHighAccuracy: false, timeout: 5000, maximumAge: 600000 }
+    );
+  });
+}
+
+async function gplacesSearch(gquery, coords) {
+  const one = async (qq) => {
+    let url = "/api/gplaces?query=" + encodeURIComponent(qq);
+    if (coords) url += `&lat=${coords.lat}&lng=${coords.lng}`;
+    try {
+      const r = await fetch(url);
+      if (!r.ok) return [];
+      const data = await r.json();
+      return data.places || [];
+    } catch (_) { return []; }
+  };
+  const lists = await Promise.all(gquery.map(one));
+  const seen = new Map();
+  lists.flat().forEach((p) => { if (p.id && !seen.has(p.id)) seen.set(p.id, p); });
+  return [...seen.values()].slice(0, 15);
+}
+
+async function fetchKrReviews(p, conv) {
+  try {
+    const region = conv.region ? conv.region.split(",")[0] : "";
+    const q = p.name + " " + region + " 후기";
+    const r = await fetch("/api/blog?query=" + encodeURIComponent(q));
+    if (!r.ok) throw new Error();
+    const data = await r.json();
+    p._reviews = data.items || [];
+  } catch (_) { p._reviews = []; }
+}
+
+async function judgeOverseas(places, maxRel) {
+  const payload = {
+    maxRelevanceScore: maxRel,
+    places: places.map((p) => ({
+      id: p.id, rating: p.rating, ratingCount: p.ratingCount,
+      rawRelevanceScore: p._rel,
+      reviews: (p._reviews || []).map((r) => ({
+        title: r.title, description: r.description, date: r.date, link: r.link, blogger: r.blogger,
+      })),
+    })),
+  };
+  try {
+    const r = await fetch("/api/judge-overseas", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) throw new Error();
+    return (await r.json()).results || [];
+  } catch (_) {
+    // 폴백: 구글 평점만으로 대략 별점
+    return places.map((p) => ({
+      id: p.id,
+      stars: Math.max(1, Math.min(5, Math.round(p.rating || 3))),
+      score100: Math.round((p.rating || 3) / 5 * 100),
+      googleRating: p.rating || null, googleRatingCount: p.ratingCount || 0,
+      breakdown: null, realCount: (p._reviews || []).length,
+      realReviews: (p._reviews || []).slice(0, 3), adCount: 0,
+    }));
+  }
+}
+
+// 해외 적합도: 가게명/카테고리/한국인후기 제목에 매칭어
+function scoreOverseasPlace(p, terms) {
+  const name = normText(p.name);
+  const cat = normText(p.category);
+  let s = 0;
+  for (const t of terms) {
+    if (!t) continue;
+    if (name.includes(t)) s += 4;
+    if (cat.includes(t)) s += 2;
+  }
+  for (const rv of p._reviews || []) {
+    const title = normText(rv.title);
+    for (const t of terms) if (t && title.includes(t)) s += 2;
+  }
+  // 구글 결과는 이미 메뉴로 검색된 것이므로 최소 적합도 보장
+  return s > 0 ? s : 1;
+}
+
+function classifyTierOverseas(p, tiers) {
+  if (!tiers) return "broad";
+  const hay = normText(p.name) + " " + normText(p.category) +
+    " " + (p._reviews || []).map((r) => normText(r.title)).join(" ");
+  const ex = normText(tiers.exact || "");
+  const br = normText(tiers.broad || "");
+  if (ex && hay.includes(ex)) return "exact";
+  if (br && hay.includes(br)) return "broad";
+  return "broader";
 }
 
 function showState(which) {
@@ -727,7 +1057,7 @@ function getCenter() {
       return Promise.resolve({ lat: manualCenter.lat, lng: manualCenter.lng });
     }
     const text = els.locInput.value.trim();
-    if (!text) throw new Error("기준 장소를 입력하거나 '주소 검색'으로 정확한 주소를 선택해 주세요.");
+    if (!text) throw new Error("역·동네 이름을 입력하거나 도로명 주소로 찾아주세요. (예: 판교역)");
     return new Promise((resolve, reject) => {
       placesSvc.keywordSearch(text, (data, status) => {
         if (status === kakao.maps.services.Status.OK && data.length) {
@@ -924,12 +1254,32 @@ function scorePlace(p, terms) {
 }
 
 function renderPlace(p, opts = {}) {
+  const overseas = !!(p.mapUrl || p.rating != null && p.place_name === undefined);
   const card = document.createElement("article");
   card.className = "place";
 
-  const naverQ = encodeURIComponent(p.place_name + " " + dongOf(p.address_name));
-  const nameQ = encodeURIComponent(p.place_name);
-  const road = p.road_address_name || p.address_name;
+  // 필드 정규화 (국내 카카오 vs 해외 구글)
+  const name = p.place_name || p.name || "";
+  const catStr = p.category_name || p.category || "";
+  const addr = p.road_address_name || p.address_name || p.address || "";
+  const naverQ = encodeURIComponent(name + " " + (overseas ? "" : dongOf(p.address_name || "")));
+  const nameQ = encodeURIComponent(name);
+
+  let linksHtml;
+  if (overseas) {
+    const gmap = p.mapUrl || `https://www.google.com/maps/search/?api=1&query=${nameQ}`;
+    const gdir = `https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}`;
+    linksHtml = `
+      <a class="primary" href="${gmap}" target="_blank" rel="noopener">구글맵</a>
+      <a href="${gdir}" target="_blank" rel="noopener">길찾기</a>
+      <a href="https://map.naver.com/p/search/${nameQ}" target="_blank" rel="noopener">네이버검색</a>`;
+  } else {
+    linksHtml = `
+      <a class="primary" href="${p.place_url}" target="_blank" rel="noopener">카카오맵</a>
+      <a href="https://map.naver.com/p/search/${naverQ}" target="_blank" rel="noopener">네이버지도</a>
+      <a href="kakaomap://route?ep=${p.y},${p.x}&by=CAR" rel="noopener">카카오내비</a>
+      <a href="tmap://route?goalname=${nameQ}&goalx=${p.x}&goaly=${p.y}" rel="noopener">티맵</a>`;
+  }
 
   card.innerHTML = `
     <div class="place-top">
@@ -939,26 +1289,21 @@ function renderPlace(p, opts = {}) {
         <button class="fav-btn" type="button" aria-label="즐겨찾기 저장/해제">★</button>
       </div>
     </div>
-    <div class="place-cat">${shortCat(p.category_name)}</div>
+    <div class="place-cat">${shortCat(catStr)}</div>
     <div class="imm-rating"></div>
     <div class="place-addr"></div>
     ${p.phone ? `<div class="place-phone"><a href="tel:${p.phone}">${p.phone}</a></div>` : ""}
-    <div class="links">
-      <a class="primary" href="${p.place_url}" target="_blank" rel="noopener">카카오맵</a>
-      <a href="https://map.naver.com/p/search/${naverQ}" target="_blank" rel="noopener">네이버지도</a>
-      <a href="kakaomap://route?ep=${p.y},${p.x}&by=CAR" rel="noopener">카카오내비</a>
-      <a href="tmap://route?goalname=${nameQ}&goalx=${p.x}&goaly=${p.y}" rel="noopener">티맵</a>
-    </div>
+    <div class="links">${linksHtml}</div>
     ${opts.compact ? "" : `
     <div class="reviews">
-      <div class="reviews-head"><span>진짜 후기만</span><span class="ad-note"></span></div>
+      <div class="reviews-head"><span>${overseas ? "한국인 후기" : "진짜 후기만"}</span><span class="ad-note"></span></div>
       <div class="review-list"></div>
     </div>`}`;
 
-  card.querySelector(".place-name").textContent = p.place_name;
-  card.querySelector(".place-addr").textContent = road;
+  card.querySelector(".place-name").textContent = name;
+  card.querySelector(".place-addr").textContent = addr;
 
-  // 임슐랭 별점 블록
+  // 별점 블록
   const imm = p._imm;
   const ratingEl = card.querySelector(".imm-rating");
   if (imm && typeof imm.stars === "number") {
@@ -966,7 +1311,14 @@ function renderPlace(p, opts = {}) {
     const score = document.createElement("span");
     score.className = "imm-score"; score.textContent = imm.stars.toFixed(1);
     ratingEl.appendChild(score);
-    if (imm.realPct != null) {
+    // 해외: 구글 평점 배지
+    if (overseas && imm.googleRating != null) {
+      const g = document.createElement("span");
+      g.className = "g-rating";
+      g.innerHTML = `<span class="g-star">★</span>${imm.googleRating} <span class="g-count">구글 ${imm.googleRatingCount.toLocaleString()}개</span>`;
+      ratingEl.appendChild(g);
+    }
+    if (!overseas && imm.realPct != null) {
       const basis = document.createElement("span");
       basis.className = "imm-basis";
       basis.innerHTML = `진짜후기 <b>${imm.realPct}%</b> · ${imm.realCount}/${imm.totalReviews}개`;
@@ -975,7 +1327,12 @@ function renderPlace(p, opts = {}) {
     if (imm.breakdown && !opts.compact) {
       const bars = document.createElement("div");
       bars.className = "imm-bars";
-      const defs = [
+      const defs = overseas ? [
+        ["구글 평점", imm.breakdown.rating],
+        ["리뷰 많음", imm.breakdown.reviewCount],
+        ["한국인 화제", imm.breakdown.krBuzz],
+        ["메뉴 적합도", imm.breakdown.relevance],
+      ] : [
         ["메뉴 적합도", imm.breakdown.relevance],
         ["광고 안 낀 후기", imm.breakdown.authenticity],
         ["후기 많음", imm.breakdown.volume],
@@ -1011,6 +1368,12 @@ function renderPlace(p, opts = {}) {
   const realReviews = (imm && imm.realReviews) || [];
   if (imm && imm.adCount > 0) adNote.textContent = `광고성 ${imm.adCount}건 제외`;
 
+  // 해외: 구글 현지 리뷰(번역) + 한국인 블로그 후기 둘 다
+  if (overseas) {
+    renderOverseasReviews(list, p, realReviews);
+    return card;
+  }
+
   if (p._reviewError) {
     list.innerHTML = '<div class="none">후기를 불러오지 못했어요. (네이버 API 키 설정을 확인해 주세요)</div>';
   } else if (realReviews.length === 0) {
@@ -1028,6 +1391,51 @@ function renderPlace(p, opts = {}) {
     });
   }
   return card;
+}
+
+/* 해외: 구글 현지 리뷰(번역) + 한국인 블로그 후기 */
+function renderOverseasReviews(list, p, krRealReviews) {
+  list.innerHTML = "";
+  const gReviews = p.reviews || []; // 구글 현지 리뷰 (gplaces가 넣어줌)
+
+  if (gReviews.length) {
+    const head = document.createElement("div");
+    head.className = "rmeta"; head.style.fontWeight = "700"; head.style.marginBottom = "4px";
+    head.textContent = "현지 리뷰";
+    list.appendChild(head);
+    gReviews.slice(0, 2).forEach((rv) => {
+      const d = document.createElement("div");
+      d.className = "review";
+      const ko = rv.textKo || (rv.lang && rv.lang.startsWith("ko") ? rv.text : "");
+      const showKo = ko || rv.text || "";
+      d.innerHTML =
+        `<div class="tr-ko">${rv.textKo ? '<span class="tr-badge">번역</span>' : ""}${escapeHtml(showKo.slice(0, 180))}</div>` +
+        (rv.textKo ? `<div class="tr-orig">${escapeHtml((rv.text || "").slice(0, 120))}</div>` : "") +
+        `<div class="rmeta">${escapeHtml(rv.author || "")}${rv.rating ? " · ★" + rv.rating : ""}${rv.time ? " · " + escapeHtml(rv.time) : ""}</div>`;
+      list.appendChild(d);
+    });
+  }
+
+  if (krRealReviews && krRealReviews.length) {
+    const head = document.createElement("div");
+    head.className = "rmeta"; head.style.fontWeight = "700"; head.style.margin = "8px 0 4px";
+    head.textContent = "한국인 블로그 후기";
+    list.appendChild(head);
+    krRealReviews.slice(0, 2).forEach((rv) => {
+      const d = document.createElement("div");
+      d.className = "review";
+      const date = rv.date ? `${rv.date.slice(0, 4)}.${rv.date.slice(4, 6)}` : "";
+      d.innerHTML = `<a href="${rv.link}" target="_blank" rel="noopener"></a><p></p><div class="rmeta"></div>`;
+      d.querySelector("a").textContent = rv.title;
+      d.querySelector("p").textContent = rv.description;
+      d.querySelector(".rmeta").textContent = [rv.blogger, date].filter(Boolean).join(" · ");
+      list.appendChild(d);
+    });
+  }
+
+  if (!gReviews.length && (!krRealReviews || !krRealReviews.length)) {
+    list.innerHTML = '<div class="none">아직 후기가 충분하지 않아요.</div>';
+  }
 }
 
 /* 별 아이콘 생성 (0.5 단위) */
