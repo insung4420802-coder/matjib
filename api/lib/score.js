@@ -161,7 +161,76 @@ function evaluatePlace(place, now = Date.now()) {
   };
 }
 
+// ────────────────────────────────────────────────────────────────
+// 해외 모드 별점
+// 국내와 데이터 출처가 다르다: 구글은 실제 평점·리뷰수를 준다.
+// 따라서 억지 자체별점 대신 구글 평점을 주축으로, 한국인 블로그 후기를 보조로 쓴다.
+//   축1) 구글 평점 (1~5) → 정규화
+//   축2) 구글 리뷰 수 (신뢰도, 로그 스케일) — 리뷰 5개짜리 4.9는 못 믿는다
+//   축3) 한국인 블로그 후기량 (한국인에게 유명한지)
+//   축4) 키워드 적합도
+// 구글 평점을 베이지안 축소: 리뷰 적으면 전체 평균(3.8) 쪽으로 당긴다.
+// ────────────────────────────────────────────────────────────────
+function bayesianRating(rating, count, prior = 3.8, k = 20) {
+  if (!rating || !count) return prior;
+  return (rating * count + prior * k) / (count + k);
+}
+
+function evaluateOverseasPlace(place, now = Date.now()) {
+  const rating = place.rating || 0;              // 구글 평점 0~5
+  const ratingCount = place.ratingCount || 0;    // 구글 리뷰 수
+  const krReviews = place.reviews || [];         // 한국인 블로그 후기(원시)
+
+  // 한국인 블로그도 광고 판정(국내 로직 재사용)
+  const { real, adCount } = classifyReviews(krReviews);
+
+  // 축1: 베이지안 보정 평점 → 0~1
+  const adjRating = bayesianRating(rating, ratingCount);
+  const ratingScore = Math.max(0, Math.min(1, (adjRating - 2.5) / 2.5)); // 2.5→0, 5.0→1
+
+  // 축2: 리뷰 수 신뢰도 → 0~1 (리뷰 500개면 충분히 신뢰)
+  const countScore = ratingCount > 0
+    ? Math.min(1, Math.log10(ratingCount + 1) / Math.log10(501))
+    : 0;
+
+  // 축3: 한국인 후기량 → 0~1 (진짜 후기 5개면 "한국인에게 유명")
+  const krScore = real.length > 0
+    ? Math.min(1, Math.log2(real.length + 1) / Math.log2(6))
+    : 0;
+
+  // 축4: 적합도
+  const relevance = relevanceScore(place.rawRelevanceScore || 0, place.maxRelevanceScore || 1);
+
+  // 결합: 구글 평점이 주축(신뢰도로 게이트), 한국인 후기·적합도는 가산
+  const gate = 0.6 + 0.4 * countScore; // 리뷰 수 적으면 상한 눌림
+  const quality =
+    0.50 * ratingScore +
+    0.25 * relevance +
+    0.25 * krScore;
+  const score01 = quality * gate;
+  const score100 = Math.round(score01 * 100);
+  const stars = toStars(score100);
+
+  return {
+    stars,
+    score100,
+    googleRating: rating ? +rating.toFixed(1) : null,
+    googleRatingCount: ratingCount,
+    breakdown: {
+      rating: +ratingScore.toFixed(3),
+      reviewCount: +countScore.toFixed(3),
+      krBuzz: +krScore.toFixed(3),
+      relevance: +relevance.toFixed(3),
+    },
+    realCount: real.length,
+    totalReviews: krReviews.length,
+    adCount,
+    realReviews: real,
+  };
+}
+
 export {
   adScore, classifyReviews, recencyScore, volumeScore,
   authenticityScore, relevanceScore, combine, toStars, evaluatePlace,
+  bayesianRating, evaluateOverseasPlace,
 };
