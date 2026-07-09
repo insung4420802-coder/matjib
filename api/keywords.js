@@ -38,18 +38,49 @@ tiers 규칙 (계층 매칭용, 각 1개씩):
 입력: 시원하게 해장할 곳
 출력: {"search":["해장국","콩나물국밥","북엇국","복국"],"match":["해장","해장국","국밥","콩나물국밥","북엇국"],"tiers":{"exact":"해장국","broad":"국밥","broader":"한식"}}`;
 
+// 해외 모드: 지역명을 분리하고, 구글 텍스트 검색용 쿼리를 만든다.
+const SYSTEM_PROMPT_OVERSEAS = `너는 해외 맛집 검색 전문가다. 한국인이 입력한 "지역+메뉴" 표현을 구글맵 텍스트 검색용으로 변환한다.
+한국어로 입력하든 영어로 입력하든 동일하게 처리한다.
+
+출력 형식 (JSON 객체 하나만, 다른 텍스트 절대 금지):
+{"region":"도시/지역 영문명","gquery":["구글검색어1","구글검색어2"],"krquery":"네이버 블로그 검색어","match":["매칭단어",...],"tiers":{"exact":"정확메뉴","broad":"상위","broader":"계열"}}
+
+규칙:
+- region: 검색 지역의 영문 표기 (예: "Osaka, Japan"). 지역이 불명확하면 "".
+- gquery: 구글맵에 던질 "메뉴+지역" 검색어 1~3개. 현지어와 영어를 섞어도 좋다.
+  예: 오사카 소바 → ["soba Osaka","そば 大阪"]
+- krquery: 한국인 블로그(네이버)에서 찾을 검색어. 보통 "지역 메뉴 맛집" 한국어.
+  예: "오사카 소바 맛집"
+- match: 결과 검증용 단어(한/영/현지어 메뉴명). 예: ["소바","soba","そば"]
+- tiers: exact(정확메뉴)/broad(상위분류)/broader(계열). 현지어·영어 포함 가능.
+
+예시 1
+입력: 오사카 소바 맛집
+출력: {"region":"Osaka, Japan","gquery":["soba Osaka","そば 大阪"],"krquery":"오사카 소바 맛집","match":["소바","soba","そば","면"],"tiers":{"exact":"소바","broad":"면요리","broader":"일식"}}
+
+예시 2
+입력: best ramen in tokyo shibuya
+출력: {"region":"Shibuya, Tokyo, Japan","gquery":["ramen Shibuya Tokyo","ラーメン 渋谷"],"krquery":"도쿄 시부야 라멘 맛집","match":["라멘","ramen","ラーメン"],"tiers":{"exact":"라멘","broad":"면요리","broader":"일식"}}
+
+예시 3
+입력: 다낭 반쎄오 맛집
+출력: {"region":"Da Nang, Vietnam","gquery":["banh xeo Da Nang","bánh xèo Đà Nẵng"],"krquery":"다낭 반쎄오 맛집","match":["반쎄오","banh xeo","bánh xèo"],"tiers":{"exact":"반쎄오","broad":"베트남음식","broader":"동남아"}}`;
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "POST 요청만 지원합니다." });
   }
 
-  const { query } = req.body || {};
+  const { query, mode } = req.body || {};
   if (!query || typeof query !== "string") {
     return res.status(400).json({ error: "query가 필요합니다." });
   }
+  const overseas = mode === "overseas";
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  const fallback = { keywords: [query.trim()], match: [query.trim()], tiers: { exact: query.trim(), broad: "", broader: "" }, converted: false };
+  const fallback = overseas
+    ? { region: "", gquery: [query.trim()], krquery: query.trim(), match: [query.trim()], tiers: { exact: query.trim(), broad: "", broader: "" }, converted: false }
+    : { keywords: [query.trim()], match: [query.trim()], tiers: { exact: query.trim(), broad: "", broader: "" }, converted: false };
   if (!apiKey) return res.status(200).json(fallback);
 
   try {
@@ -63,7 +94,7 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         model: process.env.ANTHROPIC_MODEL || "claude-haiku-4-5",
         max_tokens: 400,
-        system: SYSTEM_PROMPT,
+        system: overseas ? SYSTEM_PROMPT_OVERSEAS : SYSTEM_PROMPT,
         messages: [{ role: "user", content: query }],
       }),
     });
@@ -88,18 +119,34 @@ export default async function handler(req, res) {
         .filter((k) => !filterBad || !BAD_SEARCH.test(k)) // 안전망: 추상 키워드 제거
         .slice(0, max);
 
+    const tierOf = (p) => {
+      const t = p.tiers || {};
+      return {
+        exact: (t.exact || "").trim(),
+        broad: (t.broad || "").trim(),
+        broader: (t.broader || "").trim(),
+      };
+    };
+
+    if (overseas) {
+      const gquery = norm(parsed.gquery, 3, false);
+      const match = norm(parsed.match, 12, false);
+      const krquery = (parsed.krquery || query).trim();
+      const region = (parsed.region || "").trim();
+      const tiers = tierOf(parsed);
+      if (!tiers.exact) tiers.exact = gquery[0] || query.trim();
+      if (gquery.length === 0) return res.status(200).json(fallback);
+      return res.status(200).json({ region, gquery, krquery, match: match.slice(0, 14), tiers, converted: true });
+    }
+
     const keywords = norm(parsed.search, 5, true);
     const match = norm(parsed.match, 12, false);
 
     if (keywords.length === 0) return res.status(200).json(fallback);
     for (const k of keywords) if (!match.includes(k)) match.push(k);
 
-    const t = parsed.tiers || {};
-    const tiers = {
-      exact: (t.exact || keywords[0] || "").trim(),
-      broad: (t.broad || "").trim(),
-      broader: (t.broader || "").trim(),
-    };
+    const tiers = tierOf(parsed);
+    if (!tiers.exact) tiers.exact = keywords[0] || "";
 
     return res.status(200).json({ keywords, match: match.slice(0, 14), tiers, converted: true });
   } catch (e) {
