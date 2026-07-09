@@ -29,20 +29,26 @@ export default async function handler(req, res) {
       center = await geocode(region, key); // 지역명 → 좌표
     }
 
+    // 텍스트 쿼리에 지역명을 직접 포함시키는 게 가장 확실하다.
+    // (구글은 "soba in Tokyo Station" 같은 명시적 지역을 강하게 반영)
+    let textQuery = query;
+    if (region && !new RegExp(region.split(/\s+/)[0], "i").test(query)) {
+      textQuery = query + " " + region;
+    }
+
     const body = {
-      textQuery: query,
+      textQuery,
       languageCode: "ko",
       maxResultCount: 15,
     };
 
-    // 지역 좌표가 있으면 그 반경 안으로 결과를 "제한"(bias가 아니라 restriction)
-    // → "마제소바"만 보고 캐나다까지 긁어오는 문제를 원천 차단
+    // locationBias(circle)로 좌표 근처를 우선. (searchText의 locationRestriction은
+    // circle 미지원/불안정 → bias + 텍스트 지역명 조합이 가장 안정적)
     if (center) {
       const rad = Math.min(50000, Math.max(1000, Number(radius) || 15000));
-      body.locationRestriction = { circle: { center, radius: rad } };
-    } else {
-      // 지역을 못 잡았을 때만 한국 편향(국내 폴백)
-      body.regionCode = "KR";
+      body.locationBias = { circle: { center, radius: rad } };
+    } else if (!region) {
+      body.regionCode = "KR"; // 지역 정보가 전혀 없을 때만 한국 폴백
     }
 
     const r = await fetch("https://places.googleapis.com/v1/places:searchText", {
