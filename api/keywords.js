@@ -9,7 +9,12 @@ const SYSTEM_PROMPT = `너는 카카오맵 검색 전문가다. 사용자의 감
 따라서 사용자의 의도를 파악한 뒤, 그 의도를 만족하는 "실제 존재하는 구체적 메뉴명/업종명"으로 바꿔야 한다.
 
 출력 형식 (JSON 객체 하나만, 다른 텍스트 절대 금지):
-{"search":["키워드1",...],"match":["단어1",...],"tiers":{"exact":"정확메뉴","broad":"상위카테고리","broader":"더큰분류"}}
+{"search":["키워드1",...],"match":["단어1",...],"tiers":{"exact":"정확메뉴","broad":"상위카테고리","broader":"더큰분류"},"region":""}
+
+region 규칙:
+- 검색어에 지역명(도시/역/동네, 예: 판교, 강남역, 성수동)이 섞여 있으면 그 지역명만 region에 담는다. 없으면 "".
+- search/match에는 지역명을 절대 넣지 않는다.
+- 예: "판교 스테이크" → region:"판교", search:["스테이크","스테이크하우스"]
 
 search 규칙 (2~5개):
 - 각각이 카카오맵 검색창에 쳤을 때 실제 가게가 나오는 단어여야 한다 (구체적 메뉴명 또는 업종명)
@@ -148,7 +153,8 @@ export default async function handler(req, res) {
     const tiers = tierOf(parsed);
     if (!tiers.exact) tiers.exact = keywords[0] || "";
 
-    return res.status(200).json({ keywords, match: match.slice(0, 14), tiers, converted: true });
+    const detectedRegion = (parsed.region || "").trim();
+    return res.status(200).json({ keywords, match: match.slice(0, 14), tiers, region: detectedRegion, converted: true });
   } catch (e) {
     return res.status(200).json(fallback);
   }
