@@ -14,11 +14,36 @@ const FIELDS = [
 
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "s-maxage=1800, stale-while-revalidate");
-  const { query, lat, lng, region, radius } = req.query;
+  const { query, lat, lng, region, radius, mode } = req.query;
   if (!query) return res.status(400).json({ error: "query가 필요합니다." });
 
   const key = process.env.GOOGLE_MAPS_API_KEY;
   if (!key) return res.status(500).json({ error: "GOOGLE_MAPS_API_KEY를 등록해 주세요." });
+
+  // 장소 찾기 전용(주소 검색 오버레이용): 이름/주소/좌표만 가볍게 반환
+  if (mode === "locate") {
+    try {
+      const r = await fetch("https://places.googleapis.com/v1/places:searchText", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Goog-Api-Key": key,
+          "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.location",
+        },
+        body: JSON.stringify({ textQuery: query, languageCode: "ko", maxResultCount: 6 }),
+      });
+      if (!r.ok) return res.status(r.status).json({ error: "구글 오류", detail: await r.text() });
+      const data = await r.json();
+      const places = (data.places || []).map((p) => ({
+        id: p.id, name: p.displayName?.text || "",
+        address: p.formattedAddress || "",
+        lat: p.location?.latitude, lng: p.location?.longitude,
+      }));
+      return res.status(200).json({ places });
+    } catch (e) {
+      return res.status(500).json({ error: "검색 오류", detail: String(e) });
+    }
+  }
 
   try {
     // 기준 좌표 결정: 명시적 lat/lng > region 지오코딩
