@@ -20,6 +20,54 @@ export default async function handler(req, res) {
   const key = process.env.GOOGLE_MAPS_API_KEY;
   if (!key) return res.status(500).json({ error: "GOOGLE_MAPS_API_KEY를 등록해 주세요." });
 
+  // 자동완성(주소 검색 오버레이용): 타이핑 중 후보 반환 (한국어 입력 → 현지 장소 매칭)
+  if (mode === "autocomplete") {
+    try {
+      const r = await fetch("https://places.googleapis.com/v1/places:autocomplete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Goog-Api-Key": key },
+        body: JSON.stringify({ input: query, languageCode: "ko" }),
+      });
+      if (!r.ok) return res.status(r.status).json({ error: "구글 오류", detail: await r.text() });
+      const data = await r.json();
+      const suggestions = (data.suggestions || [])
+        .map((s) => s.placePrediction)
+        .filter(Boolean)
+        .slice(0, 6)
+        .map((p) => ({
+          placeId: p.placeId,
+          main: p.structuredFormat?.mainText?.text || p.text?.text || "",
+          secondary: p.structuredFormat?.secondaryText?.text || "",
+        }));
+      return res.status(200).json({ suggestions });
+    } catch (e) {
+      return res.status(500).json({ error: "자동완성 오류", detail: String(e) });
+    }
+  }
+
+  // 장소 상세(자동완성 선택 후 좌표 조회)
+  if (mode === "detail") {
+    try {
+      const r = await fetch("https://places.googleapis.com/v1/places/" + encodeURIComponent(query), {
+        headers: {
+          "X-Goog-Api-Key": key,
+          "X-Goog-FieldMask": "id,displayName,formattedAddress,location",
+        },
+      });
+      if (!r.ok) return res.status(r.status).json({ error: "구글 오류", detail: await r.text() });
+      const p = await r.json();
+      return res.status(200).json({
+        place: {
+          id: p.id, name: p.displayName?.text || "",
+          address: p.formattedAddress || "",
+          lat: p.location?.latitude, lng: p.location?.longitude,
+        },
+      });
+    } catch (e) {
+      return res.status(500).json({ error: "상세 조회 오류", detail: String(e) });
+    }
+  }
+
   // 장소 찾기 전용(주소 검색 오버레이용): 이름/주소/좌표만 가볍게 반환
   if (mode === "locate") {
     try {
@@ -54,24 +102,25 @@ export default async function handler(req, res) {
       center = await geocode(region, key); // 지역명 → 좌표
     }
 
-    // 텍스트 쿼리에 지역명을 직접 포함시키는 게 가장 확실하다.
-    // (구글은 "soba in Tokyo Station" 같은 명시적 지역을 강하게 반영)
+    // 좌표가 있으면 텍스트에 지역명을 넣지 않는다.
+    // ("후쿠오카"가 텍스트에 들어가면 구글이 하카타 유명집을 끼워넣는 원인)
+    // 좌표가 없을 때만(지오코딩 실패) 지역명을 텍스트로 폴백.
     let textQuery = query;
-    if (region && !new RegExp(region.split(/\s+/)[0], "i").test(query)) {
+    if (!center && region && !new RegExp(region.split(/\s+/)[0], "i").test(query)) {
       textQuery = query + " " + region;
     }
 
+    const rad = Math.min(50000, Math.max(1000, Number(radius) || 15000));
     const body = {
       textQuery,
       languageCode: "ko",
-      maxResultCount: 15,
+      maxResultCount: 20,
     };
 
-    // locationBias(circle)로 좌표 근처를 우선. (searchText의 locationRestriction은
-    // circle 미지원/불안정 → bias + 텍스트 지역명 조합이 가장 안정적)
     if (center) {
-      const rad = Math.min(50000, Math.max(1000, Number(radius) || 15000));
       body.locationBias = { circle: { center, radius: rad } };
+      // 반경이 좁으면 가까운 순으로 (1km 검색인데 3km 밖 유명집이 위로 오는 것 방지)
+      if (rad <= 5000) body.rankPreference = "DISTANCE";
     } else if (!region) {
       body.regionCode = "KR"; // 지역 정보가 전혀 없을 때만 한국 폴백
     }
@@ -130,7 +179,10 @@ export default async function handler(req, res) {
       }
     }
 
-    return res.status(200).json({ places });
+    return res.status(200).json({
+      places,
+      center: center ? { lat: center.latitude, lng: center.longitude } : null,
+    });
   } catch (e) {
     return res.status(500).json({ error: "검색 중 오류", detail: String(e) });
   }
