@@ -108,6 +108,8 @@
     margin-top: 16px;
     box-shadow: 0 1px 3px rgba(33,29,25,.05);
   }
+  .q-label { font-size: 13px; font-weight: 700; color: var(--ink); margin-bottom: 8px; }
+  .q-label span { font-weight: 500; font-size: 12px; color: var(--ink-soft); }
   .search-row { display: flex; gap: 8px; }
   .search-row input {
     flex: 1; min-width: 0;
@@ -458,6 +460,7 @@
   </div>
 
   <section class="panel">
+    <div class="q-label">🍜 무엇이 먹고 싶나요? <span>음식만 입력하세요 — 지역은 아래 '위치'에서 정해요</span></div>
     <div class="search-row">
       <input id="query" type="search" placeholder="예) 낙지 들어간 얼큰한 짬뽕" enterkeyhint="search" />
       <button id="btnSearch" class="btn-search">찾기</button>
@@ -936,13 +939,23 @@ async function runSearch() {
 
 async function runDomesticSearch(q, gen) {
   {
-    // 1) 기준 좌표
-    const center = await getCenter();
-    if (gen !== searchGen) return;
-    // 2) 감성 키워드 → 검색 키워드 + 매칭 동의어 + 계층 (Claude, 캐시 우선)
-    const { keywords, match, tiers, converted } = await convertKeywords(q);
+    // 1) 감성 키워드 → 검색 키워드 + 매칭 동의어 + 계층 + 지역 감지 (Claude, 캐시 우선)
+    const { keywords, match, tiers, region, converted } = await convertKeywords(q);
     if (gen !== searchGen) return;
     renderTicket(q, keywords, converted);
+
+    // 2) 기준 좌표 — 검색어에 지역명이 섞여 있으면("판교 스테이크") 그 지역을 우선 사용
+    let center;
+    if (region) {
+      center = await geocodeByKeyword(region);
+      if (center) {
+        els.locStatus.textContent = `📍 검색어에서 위치 '${region}'을(를) 감지해 그 근처를 찾아요. 다음엔 음식만 입력하고 위치는 아래에서 정해도 돼요.`;
+        els.locStatus.className = "loc-status";
+      }
+    }
+    if (!center) center = await getCenter();
+    if (gen !== searchGen) return;
+
     // 3) 카카오 장소 검색 (키워드별 병렬)
     const radius = Number(document.querySelector('input[name="radius"]:checked').value);
     const places = await searchPlaces(keywords, center, radius);
@@ -1012,29 +1025,50 @@ async function runOverseasSearch(q, gen) {
       els.locStatus.textContent = "기준 위치: " + manualCenter.label;
       els.locStatus.className = "loc-status";
     } else if (!userRegion) {
-      showState(null);
-      els.locStatus.textContent = "지역을 입력하거나 아래 지역 버튼을 눌러주세요. (예: 오사카 난바)";
-      els.locStatus.className = "loc-status err";
-      return;
+      // 위치칸이 비어 있어도, 검색어에 지역이 섞여 있으면("발리 스테이크") 감지해서 사용
+      const probe = await convertKeywordsOverseas(q);
+      if (gen !== searchGen) return;
+      if (probe.region) {
+        regionForSearch = probe.region;
+        searchInput = q; // 이미 지역 포함
+        els.locInput.value = probe.region.split(",")[0];
+        els.locStatus.textContent = `📍 검색어에서 위치 '${probe.region.split(",")[0]}'을(를) 감지했어요. 다음엔 음식만 입력하고 위치는 아래에서 정해도 돼요.`;
+        els.locStatus.className = "loc-status";
+      } else {
+        showState(null);
+        els.locStatus.textContent = "지역을 입력하거나 아래 지역 버튼을 눌러주세요. (예: 오사카 난바)";
+        els.locStatus.className = "loc-status err";
+        return;
+      }
     } else {
       regionForSearch = userRegion;          // "도쿄역" → 구글이 이 좌표 근처로 제한
       searchInput = userRegion + " " + q;    // Claude 분해용
     }
   } else {
-    // 현재 위치(현지) 기반 — 국내처럼 반경 검색
-    els.loading.innerHTML = '<div class="spinner"></div>현재 위치를 확인하는 중…';
-    try { coords = await getGpsQuietly(); }
-    catch (_) {
-      showState(null);
-      els.locStatus.textContent = "현재 위치를 가져오지 못했어요. '🌏 지역으로 검색'으로 도시명을 입력해 주세요.";
-      els.locStatus.className = "loc-status err";
-      return;
-    }
-    // 한국 안에서 해외 '현재 위치'를 쓰면 안내 (한반도 대략 경계)
-    if (isInKorea(coords.lat, coords.lng)) {
-      showState(null);
-      showOverseasInKoreaNotice();
-      return;
+    // 현재 위치 모드여도, 검색어에 지역이 섞여 있으면("발리 스테이크") 그 지역을 우선
+    const probe = await convertKeywordsOverseas(q);
+    if (gen !== searchGen) return;
+    if (probe.region) {
+      regionForSearch = probe.region;
+      searchInput = q;
+      els.locStatus.textContent = `📍 검색어에서 위치 '${probe.region.split(",")[0]}'을(를) 감지했어요. 다음엔 음식만 입력하고 위치는 아래에서 정해도 돼요.`;
+      els.locStatus.className = "loc-status";
+    } else {
+      // 현재 위치(현지) 기반 — 국내처럼 반경 검색
+      els.loading.innerHTML = '<div class="spinner"></div>현재 위치를 확인하는 중…';
+      try { coords = await getGpsQuietly(); }
+      catch (_) {
+        showState(null);
+        els.locStatus.textContent = "현재 위치를 가져오지 못했어요. '🌏 지역으로 검색'으로 도시명을 입력해 주세요.";
+        els.locStatus.className = "loc-status err";
+        return;
+      }
+      // 한국 안에서 해외 '현재 위치'를 쓰면 안내 (한반도 대략 경계)
+      if (isInKorea(coords.lat, coords.lng)) {
+        showState(null);
+        showOverseasInKoreaNotice();
+        return;
+      }
     }
   }
 
@@ -1103,7 +1137,7 @@ async function runOverseasSearch(q, gen) {
 }
 
 async function convertKeywordsOverseas(q) {
-  const cacheKey = "ovs1:" + q;
+  const cacheKey = "ovs2:" + q;
   try { const hit = localStorage.getItem(cacheKey); if (hit) return JSON.parse(hit); } catch (_) {}
   try {
     const r = await fetch("/api/keywords", {
@@ -1147,6 +1181,18 @@ function showOverseasInKoreaNotice() {
   });
   box.appendChild(btn);
   els.locStatus.appendChild(box);
+}
+
+/* 지역명 → 좌표 (카카오 키워드 검색, 국내용) */
+function geocodeByKeyword(text) {
+  return new Promise((resolve) => {
+    if (!kakaoReady || !placesSvc) return resolve(null);
+    placesSvc.keywordSearch(text, (data, status) => {
+      if (status === kakao.maps.services.Status.OK && data.length) {
+        resolve({ lat: Number(data[0].y), lng: Number(data[0].x) });
+      } else resolve(null);
+    });
+  });
 }
 
 function getGpsQuietly() {
@@ -1309,7 +1355,7 @@ function getCenter() {
 
 /* ───────── 2) 키워드 변환 (Claude + localStorage 캐시) ───────── */
 async function convertKeywords(q) {
-  const cacheKey = "kw3:" + q;
+  const cacheKey = "kw4:" + q;
   try {
     const hit = localStorage.getItem(cacheKey);
     if (hit) return JSON.parse(hit);
