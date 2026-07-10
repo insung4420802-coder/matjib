@@ -794,52 +794,64 @@ els.pcOverlay.addEventListener("click", (e) => {
   if (e.target === els.pcOverlay) els.pcOverlay.hidden = true;
 });
 
-/* 해외: 구글 장소/주소 검색 오버레이 */
+/* 해외: 구글 장소/주소 검색 오버레이 (자동완성) */
 function openGooglePlacePicker() {
   els.pcOverlay.hidden = false;
   els.pcEmbed.innerHTML = `
     <div class="gpick">
-      <input id="gpickInput" type="text" placeholder="장소·주소 입력 (예: Dotonbori Osaka)" />
-      <button id="gpickBtn" type="button">검색</button>
-      <div id="gpickList" class="gpick-list"></div>
+      <input id="gpickInput" type="text" placeholder="입력하면 후보가 떠요 (예: 텐진역, dotonbori)" autocomplete="off" />
+      <div id="gpickList" class="gpick-list"><div class="gpick-empty">한국어로 입력해도 현지 장소를 찾아드려요</div></div>
     </div>`;
   const input = document.getElementById("gpickInput");
-  const btn = document.getElementById("gpickBtn");
   const list = document.getElementById("gpickList");
   input.focus();
 
-  const doSearch = async () => {
+  let timer = null;
+  let seq = 0;
+  input.addEventListener("input", () => {
+    clearTimeout(timer);
     const term = input.value.trim();
-    if (!term) return;
-    list.innerHTML = '<div class="gpick-loading">검색 중…</div>';
-    try {
-      const r = await fetch("/api/gplaces?query=" + encodeURIComponent(term) + "&mode=locate");
-      const data = await r.json();
-      const places = data.places || [];
-      if (!places.length) { list.innerHTML = '<div class="gpick-empty">결과가 없어요. 다르게 입력해 보세요.</div>'; return; }
-      list.innerHTML = "";
-      places.slice(0, 6).forEach((pl) => {
-        const item = document.createElement("button");
-        item.type = "button"; item.className = "gpick-item";
-        item.innerHTML = `<b>${escapeHtml(pl.name)}</b><span>${escapeHtml(pl.address || "")}</span>`;
-        item.addEventListener("click", () => {
-          manualCenter = { lat: pl.lat, lng: pl.lng, label: pl.name };
-          els.locInput.value = pl.name;
-          const manualRadio = document.querySelector('input[name="locmode"][value="manual"]');
-          if (manualRadio) manualRadio.checked = true;
-          els.locInputRow.classList.add("show");
-          els.locStatus.textContent = "기준 위치: " + pl.name + (pl.address ? " (" + pl.address + ")" : "");
-          els.locStatus.className = "loc-status";
-          els.pcOverlay.hidden = true;
+    if (term.length < 2) { list.innerHTML = ""; return; }
+    timer = setTimeout(async () => {
+      const mySeq = ++seq;
+      list.innerHTML = '<div class="gpick-loading">찾는 중…</div>';
+      try {
+        const r = await fetch("/api/gplaces?mode=autocomplete&query=" + encodeURIComponent(term));
+        const data = await r.json();
+        if (mySeq !== seq) return; // 늦게 도착한 옛 응답 무시
+        const sugs = data.suggestions || [];
+        if (!sugs.length) { list.innerHTML = '<div class="gpick-empty">후보가 없어요. 다르게 입력해 보세요.</div>'; return; }
+        list.innerHTML = "";
+        sugs.forEach((sg) => {
+          const item = document.createElement("button");
+          item.type = "button"; item.className = "gpick-item";
+          item.innerHTML = `<b>${escapeHtml(sg.main)}</b><span>${escapeHtml(sg.secondary)}</span>`;
+          item.addEventListener("click", async () => {
+            list.innerHTML = '<div class="gpick-loading">위치를 확인하는 중…</div>';
+            try {
+              const dr = await fetch("/api/gplaces?mode=detail&query=" + encodeURIComponent(sg.placeId));
+              const dd = await dr.json();
+              const pl = dd.place;
+              if (!pl || pl.lat == null) throw new Error();
+              manualCenter = { lat: pl.lat, lng: pl.lng, label: pl.name || sg.main };
+              els.locInput.value = manualCenter.label;
+              const manualRadio = document.querySelector('input[name="locmode"][value="manual"]');
+              if (manualRadio) manualRadio.checked = true;
+              els.locInputRow.classList.add("show");
+              els.locStatus.textContent = "기준 위치: " + manualCenter.label + (pl.address ? " (" + pl.address + ")" : "");
+              els.locStatus.className = "loc-status";
+              els.pcOverlay.hidden = true;
+            } catch (_) {
+              list.innerHTML = '<div class="gpick-empty">위치 조회에 실패했어요. 다시 선택해 주세요.</div>';
+            }
+          });
+          list.appendChild(item);
         });
-        list.appendChild(item);
-      });
-    } catch (_) {
-      list.innerHTML = '<div class="gpick-empty">검색 중 오류가 발생했어요.</div>';
-    }
-  };
-  btn.addEventListener("click", doSearch);
-  input.addEventListener("keydown", (e) => { if (e.key === "Enter") doSearch(); });
+      } catch (_) {
+        if (mySeq === seq) list.innerHTML = '<div class="gpick-empty">검색 중 오류가 발생했어요.</div>';
+      }
+    }, 300); // 디바운스
+  });
 }
 
 function openPostcode() {
@@ -1037,8 +1049,26 @@ async function runOverseasSearch(q, gen) {
 
   // 2) 구글 Places 검색 — 지역 좌표로 결과를 제한(캐나다 마제소바 방지)
   els.loading.innerHTML = '<div class="spinner"></div>구글맵에서 찾는 중…';
-  const gResults = await gplacesSearch(conv.gquery, coords, restrictRegion, radius);
+  const gRes = await gplacesSearch(conv.gquery, coords, restrictRegion, radius);
   if (gen !== searchGen) return;
+  let gResults = gRes.list;
+  const usedCenter = gRes.center;
+
+  // 기준 좌표가 있으면 실제 거리 계산 → 반경 밖은 잘라낸다 (bias가 끼워넣은 먼 곳 제거)
+  if (usedCenter) {
+    gResults.forEach((p) => {
+      if (p.lat != null && p.lng != null) {
+        p.distance = haversine(usedCenter.lat, usedCenter.lng, p.lat, p.lng);
+      }
+    });
+    const within = gResults.filter((p) => p.distance == null || p.distance <= radius * 1.2);
+    // 반경 내가 3곳 이상이면 엄격 적용, 부족하면 반경 2배까지 완화
+    gResults = within.length >= 3
+      ? within
+      : gResults.filter((p) => p.distance == null || p.distance <= radius * 2);
+    gResults.sort((a, b) => (a.distance || 0) - (b.distance || 0));
+  }
+
   if (gResults.length === 0) { showState("none"); return; }
 
   // 3) 한국인 블로그 후기 수집 (가게명+지역 기준, 병렬)
@@ -1131,6 +1161,7 @@ function getGpsQuietly() {
 }
 
 async function gplacesSearch(gquery, coords, region, radius) {
+  let usedCenter = coords || null;
   const one = async (qq) => {
     let url = "/api/gplaces?query=" + encodeURIComponent(qq);
     if (coords) url += `&lat=${coords.lat}&lng=${coords.lng}`;
@@ -1140,13 +1171,23 @@ async function gplacesSearch(gquery, coords, region, radius) {
       const r = await fetch(url);
       if (!r.ok) return [];
       const data = await r.json();
+      if (!usedCenter && data.center) usedCenter = data.center; // 서버가 지오코딩한 좌표
       return data.places || [];
     } catch (_) { return []; }
   };
   const lists = await Promise.all(gquery.map(one));
   const seen = new Map();
   lists.flat().forEach((p) => { if (p.id && !seen.has(p.id)) seen.set(p.id, p); });
-  return [...seen.values()].slice(0, 15);
+  return { list: [...seen.values()].slice(0, 20), center: usedCenter };
+}
+
+/* 두 좌표 간 거리(m) — 하버사인 */
+function haversine(lat1, lng1, lat2, lng2) {
+  const R = 6371000, toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1), dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return Math.round(2 * R * Math.asin(Math.sqrt(a)));
 }
 
 async function fetchKrReviews(p, conv) {
