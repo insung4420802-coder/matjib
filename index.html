@@ -209,6 +209,52 @@
   .pc-embed { width: 100%; height: 440px; }
   .loc-status { font-size: 12.5px; color: var(--kim); margin-top: 8px; }
   .loc-status.err { color: var(--broth); }
+  .ovs-notice {
+    background: #fbeae5; border: 1.5px solid #eec4b8; border-radius: 12px;
+    padding: 14px 16px; margin-top: 10px; color: var(--ink);
+  }
+  .ovs-notice b { color: var(--broth-deep); font-size: 14px; }
+  .ovs-notice p { font-size: 13px; color: var(--ink-soft); margin-top: 6px; line-height: 1.5; }
+  .ovs-notice-btn {
+    font: inherit; font-size: 13.5px; font-weight: 700; cursor: pointer;
+    background: var(--broth); color: #fff; border: none; border-radius: 10px;
+    padding: 9px 14px; margin-top: 12px; width: 100%;
+  }
+  .ovs-notice-btn:hover { background: var(--broth-deep); }
+
+  /* 구글 장소 검색 오버레이 */
+  .gpick { padding: 14px; }
+  .gpick input {
+    width: 100%; font: inherit; font-size: 16px; padding: 11px 13px;
+    border: 1.5px solid var(--line); border-radius: 10px; box-sizing: border-box;
+  }
+  .gpick button {
+    margin-top: 8px; width: 100%; font: inherit; font-size: 14px; font-weight: 700;
+    background: #1a73e8; color: #fff; border: none; border-radius: 10px; padding: 11px; cursor: pointer;
+  }
+  .gpick-list { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; max-height: 300px; overflow-y: auto; }
+  .gpick-item {
+    text-align: left; background: #fff; border: 1.5px solid var(--line); border-radius: 10px;
+    padding: 10px 12px; cursor: pointer; display: flex; flex-direction: column; gap: 2px;
+  }
+  .gpick-item:hover { border-color: #1a73e8; background: #f5f9ff; }
+  .gpick-item b { font-size: 14px; }
+  .gpick-item span { font-size: 12px; color: var(--ink-soft); }
+  .gpick-loading, .gpick-empty { font-size: 13px; color: var(--ink-soft); padding: 12px; text-align: center; }
+
+  /* 홈 화면 추가 안내 */
+  .install-tip {
+    position: relative;
+    margin-top: 32px; padding: 14px 16px;
+    background: var(--kim-soft); border: 1px solid #cfe0d4; border-radius: 12px;
+  }
+  .install-tip b { font-size: 13.5px; color: var(--kim); }
+  .install-tip p { font-size: 12.5px; color: var(--ink-soft); margin-top: 6px; line-height: 1.5; }
+  .install-tip p b { font-size: 12.5px; color: var(--ink); }
+  .install-close {
+    position: absolute; top: 10px; right: 10px; background: none; border: none;
+    font-size: 14px; color: var(--ink-soft); cursor: pointer; padding: 2px 6px;
+  }
 
   /* ── 주문서(키워드 변환 티켓) — 시그니처 ── */
   .ticket {
@@ -474,7 +520,15 @@
   <div id="resultMeta" class="result-meta"></div>
   <div id="results" class="results"></div>
 
-  <footer>made by jhab · 후기 출처: 네이버 블로그 · 장소 정보: 카카오</footer>
+  <div class="install-tip" id="installTip">
+    <button class="install-close" id="installClose" type="button" aria-label="닫기">✕</button>
+    <b>📲 앱처럼 쓰기 · 홈 화면에 추가</b>
+    <p class="ins-ios"><b>아이폰</b>: 사파리에서 열고 하단 <b>공유</b> 버튼 → <b>"홈 화면에 추가"</b></p>
+    <p class="ins-and"><b>갤럭시</b>: 크롬 우측 상단 <b>⋮</b> 메뉴 → <b>"홈 화면에 추가"</b></p>
+    <p class="ins-note">카톡으로 받은 링크는 우측 상단 메뉴에서 <b>"다른 브라우저로 열기"</b> 후 추가하세요.</p>
+  </div>
+
+  <footer>made by jhab · 후기 출처: 네이버 블로그 · 장소 정보: 카카오/구글</footer>
 </div>
 
 <script>
@@ -665,7 +719,7 @@ function setSearchMode(mode) {
     ? '도시·지역 이름을 입력하세요 <span>예: 오사카 난바, 도쿄역, 삿포로</span>'
     : '역·동네 이름을 입력하세요 <span>예: 판교역, 강남역, 성수동</span>';
   els.locInput.placeholder = ovs ? "예) 오사카 난바" : "예) 판교역";
-  els.btnAddr.style.display = ovs ? "none" : ""; // 도로명 주소검색은 국내만
+  els.btnAddr.textContent = ovs ? "정확한 장소·주소로 찾기 (구글) →" : "정확한 도로명 주소로 찾기 →";
   els.locQuick.innerHTML = "";
   renderLocQuick();
 
@@ -673,14 +727,40 @@ function setSearchMode(mode) {
   manualCenter = null;
   els.locInput.value = "";
   els.locStatus.textContent = "";
+  els.locStatus.className = "loc-status";
   // 기본은 '내 위치'로 리셋
   const gpsRadio = document.querySelector('input[name="locmode"][value="gps"]');
   if (gpsRadio) gpsRadio.checked = true;
   els.locInputRow.classList.remove("show");
+
+  // 검색 결과·검색어 완전 초기화 (해외에서 검색한 잔상이 국내로 안 넘어오게)
+  searchGen++;               // 진행 중이던 검색 무효화
+  els.query.value = "";
+  els.results.innerHTML = "";
+  els.resultMeta.textContent = "";
+  els.ticket.classList.remove("show");
+  lastResults = [];
+  champion = null;
+  currentTiers = null;
+  minStars = 0;
+  if (favMode) setFavMode(false);
+  showState("empty");
 }
 els.modeDom.addEventListener("click", () => setSearchMode("domestic"));
 els.modeOvs.addEventListener("click", () => setSearchMode("overseas"));
 setSearchMode("domestic"); // 초기 라벨/칩 설정
+
+/* 홈 화면 추가 안내 (한 번 닫으면 기억) */
+(function initInstallTip() {
+  const tip = document.getElementById("installTip");
+  const close = document.getElementById("installClose");
+  if (!tip || !close) return;
+  try { if (localStorage.getItem("imm_tip_closed") === "1") tip.style.display = "none"; } catch (_) {}
+  close.addEventListener("click", () => {
+    tip.style.display = "none";
+    try { localStorage.setItem("imm_tip_closed", "1"); } catch (_) {}
+  });
+})();
 
 function setFavMode(on) {
   favMode = on;
@@ -705,11 +785,62 @@ function renderFavView() {
 }
 
 /* ───────── 주소 검색 (카카오 우편번호 서비스) ───────── */
-els.btnAddr.addEventListener("click", openPostcode);
+els.btnAddr.addEventListener("click", () => {
+  if (searchMode === "overseas") openGooglePlacePicker();
+  else openPostcode();
+});
 els.pcClose.addEventListener("click", () => { els.pcOverlay.hidden = true; });
 els.pcOverlay.addEventListener("click", (e) => {
   if (e.target === els.pcOverlay) els.pcOverlay.hidden = true;
 });
+
+/* 해외: 구글 장소/주소 검색 오버레이 */
+function openGooglePlacePicker() {
+  els.pcOverlay.hidden = false;
+  els.pcEmbed.innerHTML = `
+    <div class="gpick">
+      <input id="gpickInput" type="text" placeholder="장소·주소 입력 (예: Dotonbori Osaka)" />
+      <button id="gpickBtn" type="button">검색</button>
+      <div id="gpickList" class="gpick-list"></div>
+    </div>`;
+  const input = document.getElementById("gpickInput");
+  const btn = document.getElementById("gpickBtn");
+  const list = document.getElementById("gpickList");
+  input.focus();
+
+  const doSearch = async () => {
+    const term = input.value.trim();
+    if (!term) return;
+    list.innerHTML = '<div class="gpick-loading">검색 중…</div>';
+    try {
+      const r = await fetch("/api/gplaces?query=" + encodeURIComponent(term) + "&mode=locate");
+      const data = await r.json();
+      const places = data.places || [];
+      if (!places.length) { list.innerHTML = '<div class="gpick-empty">결과가 없어요. 다르게 입력해 보세요.</div>'; return; }
+      list.innerHTML = "";
+      places.slice(0, 6).forEach((pl) => {
+        const item = document.createElement("button");
+        item.type = "button"; item.className = "gpick-item";
+        item.innerHTML = `<b>${escapeHtml(pl.name)}</b><span>${escapeHtml(pl.address || "")}</span>`;
+        item.addEventListener("click", () => {
+          manualCenter = { lat: pl.lat, lng: pl.lng, label: pl.name };
+          els.locInput.value = pl.name;
+          const manualRadio = document.querySelector('input[name="locmode"][value="manual"]');
+          if (manualRadio) manualRadio.checked = true;
+          els.locInputRow.classList.add("show");
+          els.locStatus.textContent = "기준 위치: " + pl.name + (pl.address ? " (" + pl.address + ")" : "");
+          els.locStatus.className = "loc-status";
+          els.pcOverlay.hidden = true;
+        });
+        list.appendChild(item);
+      });
+    } catch (_) {
+      list.innerHTML = '<div class="gpick-empty">검색 중 오류가 발생했어요.</div>';
+    }
+  };
+  btn.addEventListener("click", doSearch);
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") doSearch(); });
+}
 
 function openPostcode() {
   const start = () => {
@@ -862,14 +993,21 @@ async function runOverseasSearch(q, gen) {
   const radius = Number(document.querySelector('input[name="radius"]:checked').value) || 15000;
 
   if (locMode === "manual") {
-    if (!userRegion) {
+    // 구글 장소 검색으로 정확한 좌표를 이미 선택했다면 그걸 사용
+    if (manualCenter) {
+      coords = { lat: manualCenter.lat, lng: manualCenter.lng };
+      searchInput = manualCenter.label + " " + q;
+      els.locStatus.textContent = "기준 위치: " + manualCenter.label;
+      els.locStatus.className = "loc-status";
+    } else if (!userRegion) {
       showState(null);
       els.locStatus.textContent = "지역을 입력하거나 아래 지역 버튼을 눌러주세요. (예: 오사카 난바)";
       els.locStatus.className = "loc-status err";
       return;
+    } else {
+      regionForSearch = userRegion;          // "도쿄역" → 구글이 이 좌표 근처로 제한
+      searchInput = userRegion + " " + q;    // Claude 분해용
     }
-    regionForSearch = userRegion;          // "도쿄역" → 구글이 이 좌표 근처로 제한
-    searchInput = userRegion + " " + q;    // Claude 분해용
   } else {
     // 현재 위치(현지) 기반 — 국내처럼 반경 검색
     els.loading.innerHTML = '<div class="spinner"></div>현재 위치를 확인하는 중…';
@@ -878,6 +1016,12 @@ async function runOverseasSearch(q, gen) {
       showState(null);
       els.locStatus.textContent = "현재 위치를 가져오지 못했어요. '🌏 지역으로 검색'으로 도시명을 입력해 주세요.";
       els.locStatus.className = "loc-status err";
+      return;
+    }
+    // 한국 안에서 해외 '현재 위치'를 쓰면 안내 (한반도 대략 경계)
+    if (isInKorea(coords.lat, coords.lng)) {
+      showState(null);
+      showOverseasInKoreaNotice();
       return;
     }
   }
@@ -946,6 +1090,33 @@ async function convertKeywordsOverseas(q) {
     }
   } catch (_) {}
   return { region: "", gquery: [q], krquery: q, match: [q], tiers: { exact: q, broad: "", broader: "" }, converted: false };
+}
+
+// 대략적인 한반도(남한) 경계 박스
+function isInKorea(lat, lng) {
+  return lat >= 33.0 && lat <= 38.7 && lng >= 124.5 && lng <= 131.0;
+}
+function showOverseasInKoreaNotice() {
+  els.locStatus.innerHTML = "";
+  els.locStatus.className = "loc-status";
+  const box = document.createElement("div");
+  box.className = "ovs-notice";
+  box.innerHTML =
+    '<b>✈️ 해외에 도착한 뒤 사용해 주세요</b>' +
+    '<p>지금은 한국에 계신 것 같아요. \'현재 위치\'는 해외 현지에서 주변 맛집을 찾을 때 쓰는 기능이에요.</p>' +
+    '<p>한국에서 미리 찾아보려면 <b>🌏 지역으로 검색</b>을 눌러 "오사카 난바"처럼 도시명을 입력하세요.</p>';
+  const btn = document.createElement("button");
+  btn.type = "button"; btn.className = "ovs-notice-btn"; btn.textContent = "🌏 지역으로 검색하기";
+  btn.addEventListener("click", () => {
+    const manualRadio = document.querySelector('input[name="locmode"][value="manual"]');
+    if (manualRadio) manualRadio.checked = true;
+    els.locInputRow.classList.add("show");
+    renderLocQuick();
+    els.locInput.focus();
+    els.locStatus.innerHTML = "";
+  });
+  box.appendChild(btn);
+  els.locStatus.appendChild(box);
 }
 
 function getGpsQuietly() {
