@@ -13,6 +13,10 @@
 ────────────────────────────────────────────── -->
 <script>
   const KAKAO_JS_KEY = "360763afb09165d17f72898061dc6d05";
+  // 해외 지도 보기용 (선택): 구글 클라우드에서 "Maps JavaScript API" 활성화 후
+  // 브라우저용 키를 별도로 만들어(웹사이트 제한 필수) 아래에 입력하세요.
+  // 비워두면 해외 지도 보기만 비활성화되고 나머지는 정상 작동합니다.
+  const GOOGLE_MAPS_JS_KEY = "AIzaSyDKoi5Bqyj6j6lpZF5GmivLE6fcxtuFQPU";
 </script>
 
 <link rel="preconnect" href="https://cdn.jsdelivr.net" />
@@ -595,6 +599,8 @@ let champion = null;            // 선정 1등 맛집
 let currentTiers = null;        // 이번 검색의 계층 {exact,broad,broader}
 let searchMode = "domestic";    // "domestic" | "overseas"
 let resultView = "list";        // "list" | "map"
+let lastSearchCenter = null;    // 이번 검색의 기준 좌표 {lat,lng} (지도에 파란 점으로 표시)
+let gmapsLoading = null;        // 구글맵 JS 로딩 프라미스
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -1006,6 +1012,7 @@ async function runDomesticSearch(q, gen) {
     // 3) 카카오 장소 검색 (키워드별 병렬)
     const radius = Number(document.querySelector('input[name="radius"]:checked').value);
     const places = await searchPlaces(keywords, center, radius);
+    lastSearchCenter = center || null;
     if (gen !== searchGen) return;
 
     if (places.length === 0) { showState("none"); return; }
@@ -1134,6 +1141,7 @@ async function runOverseasSearch(q, gen) {
   if (gen !== searchGen) return;
   let gResults = gRes.list;
   const usedCenter = gRes.center;
+  lastSearchCenter = usedCenter || coords || null;
 
   // 기준 좌표가 있으면 실제 거리 계산 → 반경 밖은 잘라낸다 (bias가 끼워넣은 먼 곳 제거)
   if (usedCenter) {
@@ -1848,6 +1856,16 @@ function renderResultMap(list) {
   const bounds = new kakao.maps.LatLngBounds();
   let openInfo = null;
 
+  // 기준점(내 위치/지정 위치) 파란 점
+  if (lastSearchCenter) {
+    const cpos = new kakao.maps.LatLng(lastSearchCenter.lat, lastSearchCenter.lng);
+    bounds.extend(cpos);
+    new kakao.maps.CustomOverlay({
+      map, position: cpos,
+      content: '<div style="width:16px;height:16px;border-radius:50%;background:#1a73e8;border:3px solid #fff;box-shadow:0 1px 6px rgba(0,0,0,.4);" title="기준 위치"></div>',
+    });
+  }
+
   withCoords.forEach((p) => {
     const pos = new kakao.maps.LatLng(Number(p.y), Number(p.x));
     bounds.extend(pos);
@@ -1868,6 +1886,106 @@ function renderResultMap(list) {
   const meta = document.createElement("div");
   meta.className = "result-meta"; meta.style.marginTop = "8px";
   meta.textContent = `핀 ${withCoords.length}개 · 핀을 누르면 가게 이름과 별점이 보여요`;
+  els.results.appendChild(meta);
+}
+
+/* 구글맵 JS 동적 로드 (지도 버튼을 눌렀을 때만) */
+function loadGoogleMaps() {
+  if (window.google && window.google.maps) return Promise.resolve();
+  if (gmapsLoading) return gmapsLoading;
+  gmapsLoading = new Promise((resolve, reject) => {
+    if (!GOOGLE_MAPS_JS_KEY) { reject(new Error("no key")); return; }
+    const cb = "__gmapsReady_" + Date.now();
+    window[cb] = () => { resolve(); delete window[cb]; };
+    const s = document.createElement("script");
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_JS_KEY}&loading=async&callback=${cb}`;
+    s.onerror = () => reject(new Error("load fail"));
+    document.head.appendChild(s);
+  });
+  return gmapsLoading;
+}
+
+/* 해외 결과 지도 (구글맵): 기준점(파란 점)과 식당 핀을 함께 표시 */
+async function renderResultMapOverseas(list) {
+  const withCoords = list.filter((p) => p.lat != null && p.lng != null);
+  const mapDiv = document.createElement("div");
+  mapDiv.id = "resultMap";
+  els.results.appendChild(mapDiv);
+
+  if (!GOOGLE_MAPS_JS_KEY) {
+    mapDiv.style.display = "none";
+    const note = document.createElement("div");
+    note.className = "result-meta"; note.style.margin = "10px 0";
+    note.textContent = "해외 지도 보기를 쓰려면 index.html 상단 GOOGLE_MAPS_JS_KEY에 브라우저용 구글맵 키를 넣어주세요. (README 참고)";
+    els.results.appendChild(note);
+    return;
+  }
+  if (!withCoords.length) {
+    mapDiv.style.display = "none";
+    const meta = document.createElement("div");
+    meta.className = "result-meta"; meta.textContent = "지도에 표시할 좌표가 없어요.";
+    els.results.appendChild(meta);
+    return;
+  }
+
+  mapDiv.innerHTML = '<div class="gpick-loading" style="padding-top:180px;text-align:center;">지도를 불러오는 중…</div>';
+  try { await loadGoogleMaps(); }
+  catch (_) {
+    mapDiv.innerHTML = "";
+    mapDiv.style.display = "none";
+    const note = document.createElement("div");
+    note.className = "result-meta";
+    note.textContent = "구글맵 로드에 실패했어요. 키와 도메인 제한(Maps JavaScript API) 설정을 확인해 주세요.";
+    els.results.appendChild(note);
+    return;
+  }
+
+  mapDiv.innerHTML = "";
+  const g = window.google.maps;
+  const map = new g.Map(mapDiv, {
+    center: { lat: withCoords[0].lat, lng: withCoords[0].lng },
+    zoom: 14,
+    mapTypeControl: false, streetViewControl: false, fullscreenControl: false,
+  });
+  const bounds = new g.LatLngBounds();
+  let openInfo = null;
+
+  // 기준점(내 위치 또는 지정 지역) — 파란 점
+  if (lastSearchCenter) {
+    const cpos = { lat: lastSearchCenter.lat, lng: lastSearchCenter.lng };
+    bounds.extend(cpos);
+    new g.Marker({
+      map, position: cpos, title: "기준 위치",
+      icon: {
+        path: g.SymbolPath.CIRCLE, scale: 9,
+        fillColor: "#1a73e8", fillOpacity: 1,
+        strokeColor: "#ffffff", strokeWeight: 3,
+      },
+      zIndex: 999,
+    });
+  }
+
+  withCoords.forEach((p) => {
+    const pos = { lat: p.lat, lng: p.lng };
+    bounds.extend(pos);
+    const marker = new g.Marker({ map, position: pos, title: p.name });
+    const stars = p._imm && typeof p._imm.stars === "number" ? ` ★${p._imm.stars.toFixed(1)}` : "";
+    const dist = p.distance != null ? ` · ${fmtDist(p.distance)}` : "";
+    const isChamp = champion && champion.id === p.id ? "👑 " : "";
+    const info = new g.InfoWindow({
+      content: `<div style="font-size:12px;font-weight:700;white-space:nowrap;color:#211d19;">${isChamp}${escapeHtml(p.name)}${stars}${dist}</div>`,
+    });
+    marker.addListener("click", () => {
+      if (openInfo) openInfo.close();
+      info.open({ map, anchor: marker });
+      openInfo = info;
+    });
+  });
+  map.fitBounds(bounds);
+
+  const meta = document.createElement("div");
+  meta.className = "result-meta"; meta.style.marginTop = "8px";
+  meta.textContent = `🔵 파란 점 = 기준 위치 · 핀 ${withCoords.length}개 (누르면 이름·별점·거리)`;
   els.results.appendChild(meta);
 }
 
@@ -2035,8 +2153,8 @@ function renderResults() {
     b.addEventListener("click", () => { minStars = v; renderResults(); });
     bar.appendChild(b);
   });
-  // 목록/지도 토글 (국내 전용: 카카오맵 SDK 사용)
-  if (searchMode === "domestic" && kakaoReady) {
+  // 목록/지도 토글 (국내=카카오맵, 해외=구글맵)
+  if ((searchMode === "domestic" && kakaoReady) || searchMode === "overseas") {
     const vt = document.createElement("div");
     vt.className = "view-toggle";
     [["list", "목록"], ["map", "지도"]].forEach(([v, label]) => {
@@ -2051,9 +2169,9 @@ function renderResults() {
   els.results.appendChild(bar);
 
   // ── 지도 모드 ──
-  if (resultView === "map" && searchMode === "domestic" && kakaoReady) {
-    renderResultMap(filtered);
-    return;
+  if (resultView === "map") {
+    if (searchMode === "domestic" && kakaoReady) { renderResultMap(filtered); return; }
+    if (searchMode === "overseas") { renderResultMapOverseas(filtered); return; }
   }
 
   // ── 계층별 그룹 (1등은 그룹에서도 표시하되 배지로 중복 안내) ──
