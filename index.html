@@ -190,6 +190,33 @@
   }
   .btn-addr-link:hover { color: var(--kim); }
 
+  /* 위치 후보 리스트 (인라인 자동완성) */
+  .loc-suggest { display: flex; flex-direction: column; gap: 5px; margin-top: 8px; }
+  .loc-suggest button {
+    text-align: left; font: inherit; cursor: pointer;
+    background: #fff; border: 1.5px solid var(--line); border-radius: 10px;
+    padding: 9px 12px; display: flex; flex-direction: column; gap: 1px;
+  }
+  .loc-suggest button:hover { border-color: var(--kim); background: var(--kim-soft); }
+  .loc-suggest button b { font-size: 13.5px; }
+  .loc-suggest button span { font-size: 11.5px; color: var(--ink-soft); }
+  .loc-suggest .ls-note { font-size: 12px; color: var(--ink-soft); padding: 4px 2px; }
+
+  /* 이름 찾기 vs 주소 찾기 구분선 + 승격된 주소 버튼 */
+  .loc-divider {
+    display: flex; align-items: center; gap: 8px;
+    margin: 12px 0 10px; font-size: 11px; color: #a9b8ae;
+  }
+  .loc-divider::before, .loc-divider::after {
+    content: ""; flex: 1; height: 1px; background: #d5e2d9;
+  }
+  .btn-addr2 {
+    width: 100%; font: inherit; font-size: 13.5px; font-weight: 700; cursor: pointer;
+    background: #fff; color: var(--kim);
+    border: 1.5px solid var(--kim); border-radius: 10px; padding: 11px;
+  }
+  .btn-addr2:hover { background: var(--kim-soft); }
+
   /* 주소 검색 오버레이 */
   .pc-overlay {
     position: fixed; inset: 0; z-index: 100;
@@ -531,13 +558,15 @@
 
     <div id="locInputRow" class="loc-input-row">
       <div class="loc-input-inner">
-        <div class="loc-hint" id="locHint">역·동네 이름을 입력하세요 <span>예: 판교역, 강남역, 성수동</span></div>
+        <div class="loc-hint" id="locHint">🔍 역·동네·장소 이름으로 찾기 <span>입력하면 후보가 떠요</span></div>
         <div class="loc-input-line">
-          <input id="locInput" type="text" placeholder="예) 판교역" enterkeyhint="search" />
+          <input id="locInput" type="text" placeholder="예) 강남역" enterkeyhint="search" autocomplete="off" />
           <button id="btnSearchHere" class="btn-here" type="button">이 위치로 찾기</button>
         </div>
+        <div class="loc-suggest" id="locSuggest"></div>
         <div class="loc-quick" id="locQuick"></div>
-        <button id="btnAddr" class="btn-addr-link" type="button">정확한 도로명 주소로 찾기 →</button>
+        <div class="loc-divider">또는</div>
+        <button id="btnAddr" class="btn-addr2" type="button">🏠 도로명 주소로 정확하게 찾기</button>
       </div>
     </div>
     <div id="locStatus" class="loc-status"></div>
@@ -607,7 +636,8 @@ const els = {
   query: $("query"), btn: $("btnSearch"),
   locInputRow: $("locInputRow"), locInput: $("locInput"), locStatus: $("locStatus"),
   btnAddr: $("btnAddr"), btnSearchHere: $("btnSearchHere"), locQuick: $("locQuick"),
-  modeGpsLabel: $("modeGpsLabel"), modeManualLabel: $("modeManualLabel"), locHint: $("locHint"), pcOverlay: $("postcodeOverlay"), pcClose: $("pcClose"), pcEmbed: $("postcodeEmbed"),
+  modeGpsLabel: $("modeGpsLabel"), modeManualLabel: $("modeManualLabel"), locHint: $("locHint"),
+  locSuggest: $("locSuggest"), pcOverlay: $("postcodeOverlay"), pcClose: $("pcClose"), pcEmbed: $("postcodeEmbed"),
   ticket: $("ticket"), ticketBody: $("ticketBody"),
   loading: $("stateLoading"), empty: $("stateEmpty"), none: $("stateNone"),
   results: $("results"), resultMeta: $("resultMeta"),
@@ -680,7 +710,83 @@ els.btnSearchHere.addEventListener("click", () => {
   else { els.locStatus.textContent = "먼저 위에 먹고 싶은 메뉴를 입력해 주세요."; els.locStatus.className = "loc-status err"; els.query.focus(); }
 });
 // 사용자가 직접 타이핑하면 주소검색으로 정한 좌표는 무효화
-els.locInput.addEventListener("input", () => { manualCenter = null; });
+/* 위치칸 인라인 후보: 타이핑하면 국내(카카오)/해외(구글) 후보가 떠서 고를 수 있다 */
+let locSuggestTimer = null;
+let locSuggestSeq = 0;
+els.locInput.addEventListener("input", () => {
+  manualCenter = null; // 직접 타이핑하면 이전 선택 좌표 무효화
+  clearTimeout(locSuggestTimer);
+  const term = els.locInput.value.trim();
+  if (term.length < 2) { els.locSuggest.innerHTML = ""; return; }
+  locSuggestTimer = setTimeout(() => showLocSuggestions(term), 300);
+});
+
+async function showLocSuggestions(term) {
+  const mySeq = ++locSuggestSeq;
+  els.locSuggest.innerHTML = '<div class="ls-note">후보를 찾는 중…</div>';
+
+  let items = []; // {label, sub, resolve(): Promise<{lat,lng,label}>}
+  try {
+    if (searchMode === "domestic") {
+      if (!kakaoReady || !placesSvc) { els.locSuggest.innerHTML = ""; return; }
+      const data = await new Promise((resolve) => {
+        placesSvc.keywordSearch(term, (d, status) =>
+          resolve(status === kakao.maps.services.Status.OK ? d : []));
+      });
+      items = data.slice(0, 5).map((pl) => ({
+        label: pl.place_name,
+        sub: pl.road_address_name || pl.address_name || "",
+        resolve: async () => ({ lat: Number(pl.y), lng: Number(pl.x), label: pl.place_name, sub: pl.address_name }),
+      }));
+    } else {
+      const r = await fetch("/api/gplaces?mode=autocomplete&query=" + encodeURIComponent(term));
+      const data = await r.json();
+      items = (data.suggestions || []).slice(0, 5).map((sg) => ({
+        label: sg.main,
+        sub: sg.secondary,
+        resolve: async () => {
+          const dr = await fetch("/api/gplaces?mode=detail&query=" + encodeURIComponent(sg.placeId));
+          const dd = await dr.json();
+          const pl = dd.place;
+          if (!pl || pl.lat == null) throw new Error();
+          return { lat: pl.lat, lng: pl.lng, label: pl.name || sg.main, sub: pl.address };
+        },
+      }));
+    }
+  } catch (_) { items = []; }
+
+  if (mySeq !== locSuggestSeq) return; // 늦게 도착한 옛 응답 무시
+  if (!items.length) {
+    els.locSuggest.innerHTML = '<div class="ls-note">후보가 없어요. 다르게 입력하거나 아래 주소 검색을 써보세요.</div>';
+    return;
+  }
+  els.locSuggest.innerHTML = "";
+  items.forEach((it) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.innerHTML = "<b></b><span></span>";
+    b.querySelector("b").textContent = it.label;
+    b.querySelector("span").textContent = it.sub || "";
+    b.addEventListener("click", async () => {
+      b.querySelector("b").textContent = "확인 중…";
+      try {
+        const c = await it.resolve();
+        manualCenter = { lat: c.lat, lng: c.lng, label: c.label };
+        els.locInput.value = c.label;
+        els.locSuggest.innerHTML = "";
+        els.locStatus.textContent = "✅ 기준 위치: " + c.label + (c.sub ? " (" + c.sub + ")" : "");
+        els.locStatus.className = "loc-status";
+        if (els.query.value.trim()) runSearch();
+        else els.query.focus();
+      } catch (_) {
+        b.querySelector("b").textContent = it.label;
+        els.locStatus.textContent = "위치 확인에 실패했어요. 다른 후보를 선택해 주세요.";
+        els.locStatus.className = "loc-status err";
+      }
+    });
+    els.locSuggest.appendChild(b);
+  });
+}
 
 /* ───────── 최근 검색 히스토리 ───────── */
 const HKEY = "imm_hist";
@@ -770,11 +876,12 @@ function setSearchMode(mode) {
   if (manualSpan) manualSpan.textContent = ovs ? "🌏 지역으로 검색" : "🔍 장소로 검색";
 
   // 위치 입력 힌트/칩 갱신
+  els.locInput.placeholder = ovs ? "예) 오사카 난바" : "예) 강남역";
+  els.btnAddr.textContent = ovs ? "🏠 정확한 주소·건물로 찾기 (구글)" : "🏠 도로명 주소로 정확하게 찾기";
+  els.locSuggest.innerHTML = "";
   els.locHint.innerHTML = ovs
-    ? '도시·지역 이름을 입력하세요 <span>예: 오사카 난바, 도쿄역, 삿포로</span>'
-    : '역·동네 이름을 입력하세요 <span>예: 판교역, 강남역, 성수동</span>';
-  els.locInput.placeholder = ovs ? "예) 오사카 난바" : "예) 판교역";
-  els.btnAddr.textContent = ovs ? "정확한 장소·주소로 찾기 (구글) →" : "정확한 도로명 주소로 찾기 →";
+    ? '🔍 도시·지역·장소 이름으로 찾기 <span>입력하면 후보가 떠요 · 예: 텐진역, 도쿄역</span>'
+    : '🔍 역·동네·장소 이름으로 찾기 <span>입력하면 후보가 떠요 · 예: 강남역, 성수동</span>';
   els.locQuick.innerHTML = "";
   renderLocQuick();
 
