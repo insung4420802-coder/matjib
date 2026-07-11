@@ -9,6 +9,7 @@ const FIELDS = [
   "places.id", "places.displayName", "places.formattedAddress",
   "places.location", "places.rating", "places.userRatingCount",
   "places.primaryTypeDisplayName", "places.googleMapsUri",
+  "places.priceLevel", "places.currentOpeningHours.openNow",
   "places.reviews",
 ].join(",");
 
@@ -149,6 +150,8 @@ export default async function handler(req, res) {
       ratingCount: p.userRatingCount || 0,
       category: p.primaryTypeDisplayName?.text || "",
       mapUrl: p.googleMapsUri || "",
+      priceLevel: p.priceLevel || null, // PRICE_LEVEL_INEXPENSIVE ~ VERY_EXPENSIVE
+      openNow: p.currentOpeningHours ? p.currentOpeningHours.openNow === true : null,
       reviews: (p.reviews || []).slice(0, 3).map((rv) => ({
         author: rv.authorAttribution?.displayName || "",
         text: rv.originalText?.text || rv.text?.text || "",
