@@ -993,7 +993,7 @@ async function runSearch() {
 async function runDomesticSearch(q, gen) {
   {
     // 1) 감성 키워드 → 검색 키워드 + 매칭 동의어 + 계층 + 지역 감지 (Claude, 캐시 우선)
-    const { keywords, match, tiers, region, converted } = await convertKeywords(q);
+    const { keywords, match, food, theme, tiers, region, converted } = await convertKeywords(q);
     if (gen !== searchGen) return;
     renderTicket(q, keywords, converted);
 
@@ -1023,8 +1023,9 @@ async function runDomesticSearch(q, gen) {
     if (gen !== searchGen) return;
 
     // 5) 키워드 적합도 점수 → 적합도 0인 곳(엉뚱한 업종)은 제외
-    const terms = (match && match.length ? match : keywords).map(normText);
-    places.forEach((p) => { p._rel = scorePlace(p, terms); });
+    const foodTerms = ((food && food.length ? food : match) || keywords).map(normText);
+    const themeTerms = (theme || []).map(normText);
+    places.forEach((p) => { p._rel = scorePlace(p, foodTerms, themeTerms); });
     const maxRel = Math.max(1, ...places.map((p) => p._rel));
     const candidates = places.filter((p) => p._rel > 0);
     if (candidates.length === 0) { showState("none"); return; }
@@ -1192,7 +1193,7 @@ async function runOverseasSearch(q, gen) {
 }
 
 async function convertKeywordsOverseas(q) {
-  const cacheKey = "ovs2:" + q;
+  const cacheKey = "ovs3:" + q;
   try { const hit = localStorage.getItem(cacheKey); if (hit) return JSON.parse(hit); } catch (_) {}
   try {
     const r = await fetch("/api/keywords", {
@@ -1410,7 +1411,7 @@ function getCenter() {
 
 /* ───────── 2) 키워드 변환 (Claude + localStorage 캐시) ───────── */
 async function convertKeywords(q) {
-  const cacheKey = "kw4:" + q;
+  const cacheKey = "kw5:" + q;
   try {
     const hit = localStorage.getItem(cacheKey);
     if (hit) return JSON.parse(hit);
@@ -1554,25 +1555,41 @@ async function judgePlaces(places, maxRel) {
 function normText(s) {
   return (s || "").toLowerCase().replace(/\s+/g, "");
 }
-function scorePlace(p, terms) {
+function scorePlace(p, terms, themeTerms = []) {
   const name = normText(p.place_name);
   const cat = normText(p.category_name);
   let score = 0;
+  let foodHit = false; // 음식/업종 매칭은 필수 조건
+
   for (const t of terms) {
     if (!t) continue;
-    if (name.includes(t)) score += 4;   // 가게명에 메뉴가 들어가면 가장 강한 신호
-    if (cat.includes(t)) score += 2;    // 카카오 카테고리 문자열
+    if (name.includes(t)) { score += 4; foodHit = true; }
+    if (cat.includes(t)) { score += 2; foodHit = true; }
   }
   for (const rv of p._reviews || []) {
     const title = normText(rv.title);
     const desc = normText(rv.description);
     for (const t of terms) {
       if (!t) continue;
-      if (title.includes(t)) score += 3; // 후기 제목에 메뉴명 = 제일 확실한 증거
+      if (title.includes(t)) { score += 3; foodHit = true; }
+      else if (desc.includes(t)) { score += 1; foodHit = true; }
+    }
+    // 테마는 가산점: 후기 제목의 "오션뷰/바다 보이는"이 가장 확실한 증거
+    for (const t of themeTerms) {
+      if (!t) continue;
+      if (title.includes(t)) score += 3;
       else if (desc.includes(t)) score += 1;
     }
   }
-  return score;
+  // 가게명/카테고리의 테마(예: "오션뷰횟집")도 가산
+  for (const t of themeTerms) {
+    if (!t) continue;
+    if (name.includes(t)) score += 3;
+    if (cat.includes(t)) score += 1;
+  }
+
+  // 음식 매칭이 하나도 없으면 제외 (오션뷰 카페가 횟집 검색에 뜨는 것 방지)
+  return foodHit ? score : 0;
 }
 
 function renderPlace(p, opts = {}) {
