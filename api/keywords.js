@@ -9,11 +9,18 @@ const SYSTEM_PROMPT = `너는 카카오맵 검색 전문가다. 사용자의 감
 따라서 사용자의 의도를 파악한 뒤, 그 의도를 만족하는 "실제 존재하는 구체적 메뉴명/업종명"으로 바꿔야 한다.
 
 출력 형식 (JSON 객체 하나만, 다른 텍스트 절대 금지):
-{"search":["키워드1",...],"match":["단어1",...],"tiers":{"exact":"정확메뉴","broad":"상위카테고리","broader":"더큰분류"},"region":""}
+{"search":["키워드1",...],"match":["단어1",...],"food":["음식단어",...],"theme":["테마단어",...],"tiers":{"exact":"정확메뉴","broad":"상위카테고리","broader":"더큰분류"},"region":""}
+
+테마 처리 규칙 (중요):
+- "바다가 보이는", "분위기 좋은", "아이랑 가기 좋은" 같은 테마가 있으면, 지도/후기에서 실제로 쓰이는 말로 변환한다:
+  바다가 보이는→오션뷰/바다뷰, 야경→루프탑/야경, 전통적인→한옥/노포, 조용한→룸/프라이빗
+- search에는 "테마+음식" 2단어 조합 키워드를 포함할 수 있다. 예: "오션뷰 횟집"
+- food: 음식/업종 단어만 (필수 조건 매칭용). theme: 테마 단어만 (가산점 매칭용, 후기 제목에 쓰이는 표현 위주)
+- 테마가 없으면 theme은 빈 배열
 
 region 규칙:
 - 검색어에 지역명(도시/역/동네, 예: 판교, 강남역, 성수동)이 섞여 있으면 그 지역명만 region에 담는다. 없으면 "".
-- search/match에는 지역명을 절대 넣지 않는다.
+- search/match/food/theme에는 지역명을 절대 넣지 않는다.
 - 예: "판교 스테이크" → region:"판교", search:["스테이크","스테이크하우스"]
 
 search 규칙 (2~5개):
@@ -41,7 +48,11 @@ tiers 규칙 (계층 매칭용, 각 1개씩):
 
 예시 3
 입력: 시원하게 해장할 곳
-출력: {"search":["해장국","콩나물국밥","북엇국","복국"],"match":["해장","해장국","국밥","콩나물국밥","북엇국"],"tiers":{"exact":"해장국","broad":"국밥","broader":"한식"}}`;
+출력: {"search":["해장국","콩나물국밥","북엇국","복국"],"match":["해장","해장국","국밥","콩나물국밥","북엇국"],"food":["해장국","콩나물국밥","북엇국","복국","국밥"],"theme":[],"tiers":{"exact":"해장국","broad":"국밥","broader":"한식"},"region":""}
+
+예시 4 (테마 검색)
+입력: 바다가 보이는 횟집
+출력: {"search":["오션뷰 횟집","횟집","오션뷰 회"],"match":["횟집","회","물회","오션뷰","바다뷰","바다","뷰"],"food":["횟집","회","물회","사시미","해산물"],"theme":["오션뷰","바다뷰","바다","뷰"],"tiers":{"exact":"횟집","broad":"해산물","broader":"한식"},"region":""}`;
 
 // 해외 모드: 지역명을 분리하고, 구글 텍스트 검색용 쿼리를 만든다.
 const SYSTEM_PROMPT_OVERSEAS = `너는 해외 맛집 검색 전문가다. 한국인이 입력한 "지역+메뉴" 표현을 구글맵 텍스트 검색용으로 변환한다.
@@ -57,6 +68,8 @@ const SYSTEM_PROMPT_OVERSEAS = `너는 해외 맛집 검색 전문가다. 한국
 - krquery: 한국인 블로그(네이버)에서 찾을 검색어. 보통 "지역 메뉴 맛집" 한국어.
   예: "오사카 소바 맛집"
 - match: 결과 검증용 단어(한/영/현지어 메뉴명). 예: ["소바","soba","そば"]
+- 테마가 있으면("바다가 보이는 횟집") gquery에 자연어로 포함시킨다: "ocean view seafood restaurant Okinawa".
+  match에도 테마 단어(오션뷰, ocean view 등)를 추가한다. 구글은 자연어 테마를 잘 이해한다.
 - tiers: exact(정확메뉴)/broad(상위분류)/broader(계열). 현지어·영어 포함 가능.
 
 예시 1
@@ -150,11 +163,19 @@ export default async function handler(req, res) {
     if (keywords.length === 0) return res.status(200).json(fallback);
     for (const k of keywords) if (!match.includes(k)) match.push(k);
 
+    const food = norm(parsed.food, 8, false);
+    const theme = norm(parsed.theme, 6, false);
+
     const tiers = tierOf(parsed);
     if (!tiers.exact) tiers.exact = keywords[0] || "";
 
     const detectedRegion = (parsed.region || "").trim();
-    return res.status(200).json({ keywords, match: match.slice(0, 14), tiers, region: detectedRegion, converted: true });
+    return res.status(200).json({
+      keywords, match: match.slice(0, 14),
+      food: food.length ? food : match.slice(0, 8), // food 없으면 match로 대체(하위호환)
+      theme,
+      tiers, region: detectedRegion, converted: true,
+    });
   } catch (e) {
     return res.status(200).json(fallback);
   }
