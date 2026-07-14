@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>임슐랭 가이드 — 광고 걸러낸 진짜 맛집만</title>
-<meta name="description" content="말하듯 검색하면 광고를 걸러낸 진짜 후기의 만족도로 근처 맛집을 찾아드립니다." />
+<meta name="description" content="얼큰한 국물, 시원한 해장 — 말하듯 검색하면 근처 맛집을 후기와 함께 찾아드립니다." />
 
 <!-- ─────────────────────────────────────────────
   ① 여기에 카카오 개발자 콘솔의 "JavaScript 키"를 넣어주세요.
@@ -12,11 +12,11 @@
      플랫폼 > Web 에 배포 도메인 등록도 필요합니다.
 ────────────────────────────────────────────── -->
 <script>
-  const KAKAO_JS_KEY = "360763afb09165d17f72898061dc6d05";
+  const KAKAO_JS_KEY = "여기에_카카오_JAVASCRIPT_키_입력";
   // 해외 지도 보기용 (선택): 구글 클라우드에서 "Maps JavaScript API" 활성화 후
   // 브라우저용 키를 별도로 만들어(웹사이트 제한 필수) 아래에 입력하세요.
   // 비워두면 해외 지도 보기만 비활성화되고 나머지는 정상 작동합니다.
-  const GOOGLE_MAPS_JS_KEY = "AIzaSyC3Fewzo0Fav5GM5V1HLBN_gH8OadEONrk";
+  const GOOGLE_MAPS_JS_KEY = "";
 </script>
 
 <link rel="preconnect" href="https://cdn.jsdelivr.net" />
@@ -227,7 +227,6 @@
   .pc-overlay[hidden] { display: none; }
   .pc-box {
     width: 100%; max-width: 480px;
-    max-height: calc(100dvh - 32px);
     background: #fff; border-radius: 14px; overflow: hidden;
     box-shadow: 0 12px 40px rgba(0,0,0,.25);
   }
@@ -240,7 +239,7 @@
     font: inherit; font-size: 16px; background: none; border: none;
     cursor: pointer; color: var(--ink-soft); padding: 4px 8px;
   }
-  .pc-embed { width: 100%; height: min(440px, calc(100dvh - 92px)); }
+  .pc-embed { width: 100%; height: 440px; }
   .loc-status { font-size: 12.5px; color: var(--kim); margin-top: 8px; }
   .loc-status.err { color: var(--broth); }
   .ovs-notice {
@@ -347,11 +346,6 @@
   }
   .imm-basis { font-size: 11.5px; color: var(--ink-soft); }
   .imm-basis b { color: var(--kim); font-weight: 700; }
-  .evidence-badge {
-    font-size: 12px; font-weight: 700; border-radius: 6px; padding: 3px 8px;
-    color: #7a5a13; background: #fdf3d8;
-  }
-  .evidence-badge.unavailable { color: #8a3b2d; background: #fbeae5; }
   .imm-bars { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; }
   .imm-bar { display: grid; grid-template-columns: 88px 1fr 26px; align-items: center; gap: 8px; }
   .imm-bar .ib-label { font-size: 11px; color: var(--ink-soft); }
@@ -534,11 +528,11 @@
     <div class="head-row">
       <div>
         <div class="mode-toggle" role="radiogroup" aria-label="검색 모드">
-          <button id="modeDom" class="mode-btn on" type="button" role="radio" aria-checked="true">🇰🇷 국내</button>
-          <button id="modeOvs" class="mode-btn" type="button" role="radio" aria-checked="false">✈️ 해외</button>
+          <button id="modeDom" class="mode-btn on" type="button">🇰🇷 국내</button>
+          <button id="modeOvs" class="mode-btn" type="button">✈️ 해외</button>
         </div>
         <div class="brand">임슐랭 가이드<span class="dot">★</span></div>
-        <div class="tagline" id="tagline">광고 걸러낸 진짜 후기의 만족도로 별점을 매깁니다</div>
+        <div class="tagline" id="tagline">광고 걸러낸 진짜 후기로만 별점을 매깁니다</div>
       </div>
       <button id="btnFavs" class="btn-favs" type="button">★ 즐겨찾기 <span id="favCount">0</span></button>
     </div>
@@ -594,9 +588,9 @@
 
   <!-- 우편번호(주소) 검색 오버레이 -->
   <div id="postcodeOverlay" class="pc-overlay" hidden>
-    <div class="pc-box" role="dialog" aria-modal="true" aria-labelledby="pcTitle">
+    <div class="pc-box">
       <div class="pc-head">
-        <span id="pcTitle">주소 검색</span>
+        <span>주소 검색</span>
         <button id="pcClose" type="button" aria-label="닫기">✕</button>
       </div>
       <div id="postcodeEmbed" class="pc-embed"></div>
@@ -608,7 +602,7 @@
     <div class="t-body" id="ticketBody"></div>
   </div>
 
-  <div id="stateLoading" class="state" role="status" aria-live="polite"><div class="spinner"></div>맛집을 찾는 중이에요…</div>
+  <div id="stateLoading" class="state"><div class="spinner"></div>맛집을 찾는 중이에요…</div>
   <div id="stateEmpty" class="state"><div class="big">아직 텅 비었어요</div>먹고 싶은 걸 편하게 적어보세요.<br>"시원한 해장", "아이랑 가기 좋은 돈까스"도 좋아요.</div>
   <div id="stateNone" class="state"><div class="big">이 근처엔 없네요</div>반경을 넓히거나 다른 키워드로 시도해 보세요.</div>
 
@@ -644,25 +638,8 @@ let searchMode = "domestic";    // "domestic" | "overseas"
 let resultView = "list";        // "list" | "map"
 let lastSearchCenter = null;    // 이번 검색의 기준 좌표 {lat,lng} (지도에 파란 점으로 표시)
 let gmapsLoading = null;        // 구글맵 JS 로딩 프라미스
-let activeController = null;    // 새 검색/모드 전환 시 이전 네트워크 요청 취소
 
 const $ = (id) => document.getElementById(id);
-
-/* 선택형 지인 공유 접근 코드. Vercel에 APP_ACCESS_KEY를 설정한 경우에만 동작한다. */
-async function apiFetch(url, options = {}, canRetry = true) {
-  const headers = new Headers(options.headers || {});
-  let accessKey = "";
-  try { accessKey = localStorage.getItem("imm_access_key") || ""; } catch (_) {}
-  if (accessKey) headers.set("X-Imm-Key", accessKey);
-  const signal = options.signal || (searching && activeController ? activeController.signal : undefined);
-  const response = await fetch(url, { ...options, headers, signal });
-  if (response.status !== 401 || !canRetry) return response;
-
-  const entered = window.prompt("이 앱의 접근 코드를 입력해 주세요.\n(운영자가 Vercel에 APP_ACCESS_KEY를 설정한 경우에만 필요합니다.)");
-  if (!entered) return response;
-  try { localStorage.setItem("imm_access_key", entered.trim()); } catch (_) {}
-  return apiFetch(url, options, false);
-}
 const els = {
   query: $("query"), btn: $("btnSearch"),
   locInputRow: $("locInputRow"), locInput: $("locInput"), locStatus: $("locStatus"),
@@ -770,13 +747,13 @@ async function showLocSuggestions(term) {
         resolve: async () => ({ lat: Number(pl.y), lng: Number(pl.x), label: pl.place_name, sub: pl.address_name }),
       }));
     } else {
-      const r = await apiFetch("/api/gplaces?mode=autocomplete&query=" + encodeURIComponent(term));
+      const r = await fetch("/api/gplaces?mode=autocomplete&query=" + encodeURIComponent(term));
       const data = await r.json();
       items = (data.suggestions || []).slice(0, 5).map((sg) => ({
         label: sg.main,
         sub: sg.secondary,
         resolve: async () => {
-          const dr = await apiFetch("/api/gplaces?mode=detail&query=" + encodeURIComponent(sg.placeId));
+          const dr = await fetch("/api/gplaces?mode=detail&query=" + encodeURIComponent(sg.placeId));
           const dd = await dr.json();
           const pl = dd.place;
           if (!pl || pl.lat == null) throw new Error();
@@ -820,14 +797,14 @@ async function showLocSuggestions(term) {
 }
 
 /* ───────── 최근 검색 히스토리 ───────── */
-function histKey() { return searchMode === "overseas" ? "imm_hist_overseas" : "imm_hist_domestic"; }
+const HKEY = "imm_hist";
 function getHist() {
-  try { return JSON.parse(localStorage.getItem(histKey())) || []; } catch (_) { return []; }
+  try { return JSON.parse(localStorage.getItem(HKEY)) || []; } catch (_) { return []; }
 }
 function addHistory(q) {
   const h = getHist().filter((x) => x !== q);
   h.unshift(q);
-  try { localStorage.setItem(histKey(), JSON.stringify(h.slice(0, 8))); } catch (_) {}
+  try { localStorage.setItem(HKEY, JSON.stringify(h.slice(0, 8))); } catch (_) {}
   renderHist();
 }
 function renderHist() {
@@ -847,7 +824,7 @@ function renderHist() {
   const clear = document.createElement("button");
   clear.className = "hist-clear"; clear.type = "button"; clear.textContent = "지우기";
   clear.addEventListener("click", () => {
-    try { localStorage.removeItem(histKey()); } catch (_) {}
+    try { localStorage.removeItem(HKEY); } catch (_) {}
     renderHist();
   });
   els.histRow.appendChild(clear);
@@ -874,13 +851,6 @@ function toggleFav(p) {
     // 해외(구글)
     name: p.name, category: p.category, address: p.address,
     lat: p.lat, lng: p.lng, rating: p.rating, ratingCount: p.ratingCount, mapUrl: p.mapUrl,
-    priceLevel: p.priceLevel, openNow: p.openNow, closedToday: p.closedToday, todayHours: p.todayHours,
-    _imm: p._imm ? {
-      stars: p._imm.stars, score100: p._imm.score100, verified: p._imm.verified,
-      insufficient: p._imm.insufficient, realCount: p._imm.realCount,
-      totalReviews: p._imm.totalReviews, realPct: p._imm.realPct,
-      googleRating: p._imm.googleRating, googleRatingCount: p._imm.googleRatingCount,
-    } : null,
     savedAt: Date.now(),
   };
   setFavs(f);
@@ -894,19 +864,13 @@ els.btnFavs.addEventListener("click", () => setFavMode(!favMode));
 
 /* ───────── 국내/해외 모드 전환 ───────── */
 function setSearchMode(mode) {
-  if (activeController) activeController.abort();
-  activeController = null;
-  searching = false;
-  els.btn.disabled = false;
   searchMode = mode;
   const ovs = mode === "overseas";
   els.modeDom.classList.toggle("on", !ovs);
   els.modeOvs.classList.toggle("on", ovs);
-  els.modeDom.setAttribute("aria-checked", String(!ovs));
-  els.modeOvs.setAttribute("aria-checked", String(ovs));
   els.tagline.textContent = ovs
     ? "구글 평점 + 한국인 후기로 해외 맛집을 찾아요"
-    : "광고 걸러낸 진짜 후기의 만족도로 별점을 매깁니다";
+    : "광고 걸러낸 진짜 후기로만 별점을 매깁니다";
   els.query.placeholder = ovs ? "예) 소바, 라멘, 스프카레" : "예) 낙지 들어간 얼큰한 짬뽕";
 
   // 반경 옵션: 국내는 항상, 해외는 '현재 위치' 모드일 때 의미 있음 → 둘 다 표시
@@ -928,7 +892,6 @@ function setSearchMode(mode) {
     : '🔍 역·동네·장소 이름으로 찾기 <span>입력하면 후보가 떠요 · 예: 강남역, 성수동</span>';
   els.locQuick.innerHTML = "";
   renderLocQuick();
-  renderHist();
 
   // 모드 전환 시 입력값/상태 초기화
   manualCenter = null;
@@ -1001,12 +964,6 @@ els.pcClose.addEventListener("click", () => { els.pcOverlay.hidden = true; });
 els.pcOverlay.addEventListener("click", (e) => {
   if (e.target === els.pcOverlay) els.pcOverlay.hidden = true;
 });
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && !els.pcOverlay.hidden) {
-    els.pcOverlay.hidden = true;
-    els.btnAddr.focus();
-  }
-});
 
 /* 해외: 구글 장소/주소 검색 오버레이 (자동완성) */
 function openGooglePlacePicker() {
@@ -1030,7 +987,7 @@ function openGooglePlacePicker() {
       const mySeq = ++seq;
       list.innerHTML = '<div class="gpick-loading">찾는 중…</div>';
       try {
-        const r = await apiFetch("/api/gplaces?mode=autocomplete&query=" + encodeURIComponent(term));
+        const r = await fetch("/api/gplaces?mode=autocomplete&query=" + encodeURIComponent(term));
         const data = await r.json();
         if (mySeq !== seq) return; // 늦게 도착한 옛 응답 무시
         const sugs = data.suggestions || [];
@@ -1043,7 +1000,7 @@ function openGooglePlacePicker() {
           item.addEventListener("click", async () => {
             list.innerHTML = '<div class="gpick-loading">위치를 확인하는 중…</div>';
             try {
-              const dr = await apiFetch("/api/gplaces?mode=detail&query=" + encodeURIComponent(sg.placeId));
+              const dr = await fetch("/api/gplaces?mode=detail&query=" + encodeURIComponent(sg.placeId));
               const dd = await dr.json();
               const pl = dd.place;
               if (!pl || pl.lat == null) throw new Error();
@@ -1114,15 +1071,13 @@ function geocodeAddress(addr, buildingName) {
 /* ───────── 검색 파이프라인 ───────── */
 async function runSearch() {
   const q = els.query.value.trim();
-  if (!q) return;
+  if (!q || searching) return;
   if (searchMode === "domestic" && !kakaoReady) {
     els.locStatus.textContent = "지도 서비스를 아직 불러오는 중이에요. 잠시 후 다시 시도해 주세요.";
     els.locStatus.className = "loc-status err";
     return;
   }
 
-  if (activeController) activeController.abort();
-  activeController = new AbortController();
   searching = true;
   const gen = ++searchGen; // 이 검색의 세대 번호. 이후 도착하는 옛 응답은 무시
   if (favMode) setFavMode(false); // 즐겨찾기 화면에서 검색하면 검색 화면으로 복귀
@@ -1142,16 +1097,11 @@ async function runSearch() {
       await runDomesticSearch(q, gen);
     }
   } catch (e) {
-    if (e && e.name === "AbortError") return;
     showState(null);
     els.locStatus.textContent = e.message || "검색 중 문제가 발생했어요.";
     els.locStatus.className = "loc-status err";
   } finally {
-    if (gen === searchGen) {
-      searching = false;
-      activeController = null;
-      els.btn.disabled = false;
-    }
+    if (gen === searchGen) { searching = false; els.btn.disabled = false; }
   }
 }
 
@@ -1210,24 +1160,14 @@ async function runDomesticSearch(q, gen) {
     candidates.forEach((p) => {
       const j = byId[p.id] || {};
       p._imm = j;
-      p._cleanRel = scorePlace(p, foodTerms, themeTerms, j.realReviews || []);
-      p._tier = classifyTier(p, tiers, j.realReviews || []);
-    });
-    const cleanMaxRel = Math.max(1, ...candidates.map((p) => p._cleanRel || 0));
-    candidates.forEach((p) => {
-      if (p._imm?.breakdown) {
-        p._imm.breakdown.relevance = +(Math.max(0, p._cleanRel || 0) / cleanMaxRel).toFixed(3);
-      }
     });
 
     // 별점 높은 순 → 동점이면 점수 → 거리
     lastResults = candidates
-      .filter((p) => p._imm && (p._imm.verified === false ? p._rel > 0 : p._cleanRel > 0))
+      .filter((p) => p._imm && typeof p._imm.stars === "number")
       .sort((a, b) =>
-        Number(b._imm.verified !== false) - Number(a._imm.verified !== false) ||
-        (b._imm.stars ?? -1) - (a._imm.stars ?? -1) ||
-        (b._cleanRel || 0) - (a._cleanRel || 0) ||
-        (b._imm.score100 || 0) - (a._imm.score100 || 0) ||
+        b._imm.stars - a._imm.stars ||
+        b._imm.score100 - a._imm.score100 ||
         Number(a.distance) - Number(b.distance)
       );
 
@@ -1358,11 +1298,8 @@ async function runOverseasSearch(q, gen) {
   candidates.forEach((p) => { p._imm = byId[p.id] || {}; });
 
   lastResults = candidates
-    .filter((p) => p._imm)
-    .sort((a, b) =>
-      Number(b._imm.verified !== false) - Number(a._imm.verified !== false) ||
-      (b._imm.stars ?? -1) - (a._imm.stars ?? -1) ||
-      (b._imm.score100 || 0) - (a._imm.score100 || 0));
+    .filter((p) => p._imm && typeof p._imm.stars === "number")
+    .sort((a, b) => b._imm.stars - a._imm.stars || b._imm.score100 - a._imm.score100);
 
   if (lastResults.length === 0) { showState("none"); return; }
   champion = pickChampion(lastResults);
@@ -1374,7 +1311,7 @@ async function convertKeywordsOverseas(q) {
   const cacheKey = "ovs3:" + q;
   try { const hit = localStorage.getItem(cacheKey); if (hit) return JSON.parse(hit); } catch (_) {}
   try {
-    const r = await apiFetch("/api/keywords", {
+    const r = await fetch("/api/keywords", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ query: q, mode: "overseas" }),
     });
@@ -1442,13 +1379,13 @@ function getGpsQuietly() {
 
 async function gplacesSearch(gquery, coords, region, radius) {
   let usedCenter = coords || null;
-  const one = async (qq, index) => {
-    let url = "/api/gplaces?query=" + encodeURIComponent(qq) + `&translate=${index === 0 ? 1 : 0}`;
+  const one = async (qq) => {
+    let url = "/api/gplaces?query=" + encodeURIComponent(qq);
     if (coords) url += `&lat=${coords.lat}&lng=${coords.lng}`;
     else if (region) url += `&region=${encodeURIComponent(region)}`;
     if (radius) url += `&radius=${radius}`;
     try {
-      const r = await apiFetch(url);
+      const r = await fetch(url);
       if (!r.ok) return [];
       const data = await r.json();
       if (!usedCenter && data.center) usedCenter = data.center; // 서버가 지오코딩한 좌표
@@ -1474,7 +1411,7 @@ async function fetchKrReviews(p, conv) {
   try {
     const region = conv.region ? conv.region.split(",")[0] : "";
     const q = p.name + " " + region + " 후기";
-    const r = await apiFetch("/api/blog?query=" + encodeURIComponent(q));
+    const r = await fetch("/api/blog?query=" + encodeURIComponent(q));
     if (!r.ok) throw new Error();
     const data = await r.json();
     p._reviews = data.items || [];
@@ -1493,19 +1430,21 @@ async function judgeOverseas(places, maxRel) {
     })),
   };
   try {
-    const r = await apiFetch("/api/judge-overseas", {
+    const r = await fetch("/api/judge-overseas", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
     if (!r.ok) throw new Error();
     return (await r.json()).results || [];
   } catch (_) {
-    // 구글 원평점은 카드에 표시하되 임슐랭 종합 판정은 만들지 않는다.
+    // 폴백: 구글 평점만으로 대략 별점
     return places.map((p) => ({
       id: p.id,
-      stars: null, score100: null, verified: false,
+      stars: Math.max(1, Math.min(5, Math.round(p.rating || 3))),
+      score100: Math.round((p.rating || 3) / 5 * 100),
       googleRating: p.rating || null, googleRatingCount: p.ratingCount || 0,
-      breakdown: null, realCount: 0, realReviews: [], adCount: 0,
+      breakdown: null, realCount: (p._reviews || []).length,
+      realReviews: (p._reviews || []).slice(0, 3), adCount: 0,
     }));
   }
 }
@@ -1594,7 +1533,7 @@ async function convertKeywords(q) {
   } catch (_) {}
 
   try {
-    const r = await apiFetch("/api/keywords", {
+    const r = await fetch("/api/keywords", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ query: q }),
@@ -1680,7 +1619,7 @@ function dongOf(addr) {
 async function fetchReviews(p) {
   try {
     const q = p.place_name + " " + dongOf(p.address_name) + " 후기";
-    const r = await apiFetch("/api/blog?query=" + encodeURIComponent(q));
+    const r = await fetch("/api/blog?query=" + encodeURIComponent(q));
     if (!r.ok) throw new Error();
     const data = await r.json();
     p._reviews = data.items || [];
@@ -1705,7 +1644,7 @@ async function judgePlaces(places, maxRel) {
     })),
   };
   try {
-    const r = await apiFetch("/api/judge", {
+    const r = await fetch("/api/judge", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -1714,13 +1653,14 @@ async function judgePlaces(places, maxRel) {
     const data = await r.json();
     return data.results || [];
   } catch (_) {
-    // 판정 서버 실패 시 장소 정보만 유지하고 별점/진짜후기/1등은 만들지 않는다.
+    // 판정 서버 실패 시: 클라이언트에서 최소한의 폴백 (적합도만으로 대략 별점)
     return places.map((p) => ({
       id: p.id,
-      stars: null, score100: null, verified: false, insufficient: true,
-      realPct: null, realCount: 0, adCount: 0,
+      stars: Math.max(1, Math.min(5, Math.round((p._rel / maxRel) * 5))),
+      score100: Math.round((p._rel / maxRel) * 60),
+      realPct: null, adCount: 0,
       totalReviews: (p._reviews || []).length,
-      realReviews: [],
+      realReviews: (p._reviews || []).slice(0, 3),
       breakdown: null,
     }));
   }
@@ -1730,36 +1670,32 @@ async function judgePlaces(places, maxRel) {
 function normText(s) {
   return (s || "").toLowerCase().replace(/\s+/g, "");
 }
-function scorePlace(p, terms, themeTerms = [], reviewSource = null) {
+function scorePlace(p, terms, themeTerms = []) {
   const name = normText(p.place_name);
   const cat = normText(p.category_name);
   let score = 0;
   let foodHit = false; // 음식/업종 매칭은 필수 조건
-  let reviewFoodScore = 0;
-  let reviewThemeScore = 0;
 
   for (const t of terms) {
     if (!t) continue;
     if (name.includes(t)) { score += 4; foodHit = true; }
     if (cat.includes(t)) { score += 2; foodHit = true; }
   }
-  for (const rv of (reviewSource || p._reviews || [])) {
+  for (const rv of p._reviews || []) {
     const title = normText(rv.title);
     const desc = normText(rv.description);
     for (const t of terms) {
       if (!t) continue;
-      if (title.includes(t)) { reviewFoodScore += 3; foodHit = true; }
-      else if (desc.includes(t)) { reviewFoodScore += 1; foodHit = true; }
+      if (title.includes(t)) { score += 3; foodHit = true; }
+      else if (desc.includes(t)) { score += 1; foodHit = true; }
     }
     // 테마는 가산점: 후기 제목의 "오션뷰/바다 보이는"이 가장 확실한 증거
     for (const t of themeTerms) {
       if (!t) continue;
-      if (title.includes(t)) reviewThemeScore += 3;
-      else if (desc.includes(t)) reviewThemeScore += 1;
+      if (title.includes(t)) score += 3;
+      else if (desc.includes(t)) score += 1;
     }
   }
-  // 블로그 글 수가 많은 한 가게가 상대 적합도를 독점하지 않도록 후기 기여를 제한한다.
-  score += Math.min(10, reviewFoodScore) + Math.min(6, reviewThemeScore);
   // 가게명/카테고리의 테마(예: "오션뷰횟집")도 가산
   for (const t of themeTerms) {
     if (!t) continue;
@@ -1785,7 +1721,7 @@ function renderPlace(p, opts = {}) {
 
   let linksHtml;
   if (overseas) {
-    const gmap = safeHttpUrl(p.mapUrl, `https://www.google.com/maps/search/?api=1&query=${nameQ}`);
+    const gmap = p.mapUrl || `https://www.google.com/maps/search/?api=1&query=${nameQ}`;
     const gdir = `https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}`;
     linksHtml = `
       <a class="primary" href="${gmap}" target="_blank" rel="noopener">구글맵</a>
@@ -1793,9 +1729,8 @@ function renderPlace(p, opts = {}) {
       <a href="https://map.naver.com/p/search/${nameQ}" target="_blank" rel="noopener">네이버검색</a>
       ${opts.compact ? "" : '<button class="share-btn" type="button">📤 공유</button><button class="share-btn order-btn" type="button">🗣️ 주문 도우미</button>'}`;
   } else {
-    const kakaoPlaceUrl = safeHttpUrl(p.place_url, `https://map.kakao.com/?q=${nameQ}`);
     linksHtml = `
-      <a class="primary" href="${kakaoPlaceUrl}" target="_blank" rel="noopener">카카오맵</a>
+      <a class="primary" href="${p.place_url}" target="_blank" rel="noopener">카카오맵</a>
       <a href="https://map.naver.com/p/search/${naverQ}" target="_blank" rel="noopener">네이버지도</a>
       <a href="kakaomap://route?ep=${p.y},${p.x}&by=CAR" rel="noopener">카카오내비</a>
       <a href="tmap://route?goalname=${nameQ}&goalx=${p.x}&goaly=${p.y}" rel="noopener">티맵</a>
@@ -1813,7 +1748,7 @@ function renderPlace(p, opts = {}) {
     <div class="place-cat">${shortCat(catStr)}</div>
     <div class="imm-rating"></div>
     <div class="place-addr"></div>
-    ${p.phone ? `<div class="place-phone"><a href="tel:${escapeHtml(String(p.phone).replace(/[^0-9+*-]/g, ""))}">${escapeHtml(p.phone)}</a></div>` : ""}
+    ${p.phone ? `<div class="place-phone"><a href="tel:${p.phone}">${p.phone}</a></div>` : ""}
     <div class="links">${linksHtml}</div>
     ${opts.compact ? "" : `
     <div class="reviews">
@@ -1832,11 +1767,17 @@ function renderPlace(p, opts = {}) {
     const score = document.createElement("span");
     score.className = "imm-score"; score.textContent = imm.stars.toFixed(1);
     ratingEl.appendChild(score);
+    // 해외: 구글 평점 배지
+    if (overseas && imm.googleRating != null) {
+      const g = document.createElement("span");
+      g.className = "g-rating";
+      g.innerHTML = `<span class="g-star">★</span>${imm.googleRating} <span class="g-count">구글 ${imm.googleRatingCount.toLocaleString()}개</span>`;
+      ratingEl.appendChild(g);
+    }
     if (!overseas && imm.realPct != null) {
       const basis = document.createElement("span");
       basis.className = "imm-basis";
-      basis.innerHTML = `진짜후기 <b>${imm.realPct}%</b> · ${imm.realCount}/${imm.totalReviews}개` +
-        (imm.duplicateCount ? ` · 중복 ${imm.duplicateCount}건 제외` : "");
+      basis.innerHTML = `진짜후기 <b>${imm.realPct}%</b> · ${imm.realCount}/${imm.totalReviews}개`;
       ratingEl.appendChild(basis);
     }
     if (imm.breakdown && !opts.compact) {
@@ -1848,9 +1789,9 @@ function renderPlace(p, opts = {}) {
         ["한국인 화제", imm.breakdown.krBuzz],
         ["메뉴 적합도", imm.breakdown.relevance],
       ] : [
-        ["후기 만족도", imm.breakdown.satisfaction],
         ["메뉴 적합도", imm.breakdown.relevance],
         ["광고 안 낀 후기", imm.breakdown.authenticity],
+        ["후기 많음", imm.breakdown.volume],
         ["최근 후기", imm.breakdown.recency],
       ];
       defs.forEach(([label, v]) => {
@@ -1865,38 +1806,15 @@ function renderPlace(p, opts = {}) {
       });
       ratingEl.after(bars);
     }
-  } else if (imm && imm.verified === false) {
-    const badge = document.createElement("span");
-    badge.className = "evidence-badge unavailable";
-    badge.textContent = "후기 검증 일시 중단";
-    ratingEl.appendChild(badge);
-  } else if (imm && imm.insufficient) {
-    const badge = document.createElement("span");
-    badge.className = "evidence-badge";
-    badge.textContent = `별점 자료 부족 · 진짜후기 ${imm.realCount || 0}개`;
-    ratingEl.appendChild(badge);
-  }
-
-  // 해외 구글 원평점은 임슐랭 종합 판정 상태와 별개로 그대로 표시한다.
-  const googleRating = imm?.googleRating ?? p.rating;
-  const googleRatingCount = imm?.googleRatingCount ?? p.ratingCount ?? 0;
-  if (overseas && googleRating != null && Number(googleRating) > 0) {
-    const g = document.createElement("span");
-    g.className = "g-rating";
-    g.innerHTML = `<span class="g-star">★</span>${Number(googleRating).toFixed(1)} <span class="g-count">구글 ${Number(googleRatingCount).toLocaleString()}개</span>`;
-    ratingEl.appendChild(g);
-  }
-  if (!ratingEl.children.length) {
+  } else {
     ratingEl.remove();
   }
 
   const favBtn = card.querySelector(".fav-btn");
   favBtn.classList.toggle("on", isFav(p.id));
-  favBtn.setAttribute("aria-pressed", String(isFav(p.id)));
   favBtn.addEventListener("click", () => {
     toggleFav(p);
     favBtn.classList.toggle("on", isFav(p.id));
-    favBtn.setAttribute("aria-pressed", String(isFav(p.id)));
   });
 
   if (opts.compact) return card;
@@ -1958,10 +1876,7 @@ function renderPlace(p, opts = {}) {
   const list = card.querySelector(".review-list");
   const adNote = card.querySelector(".ad-note");
   const realReviews = (imm && imm.realReviews) || [];
-  const excluded = [];
-  if (imm && imm.adCount > 0) excluded.push(`광고성 ${imm.adCount}건`);
-  if (imm && imm.duplicateCount > 0) excluded.push(`중복 ${imm.duplicateCount}건`);
-  if (excluded.length) adNote.textContent = excluded.join(" · ") + " 제외";
+  if (imm && imm.adCount > 0) adNote.textContent = `광고성 ${imm.adCount}건 제외`;
 
   // 해외: 구글 현지 리뷰(번역) + 한국인 블로그 후기 둘 다
   if (overseas) {
@@ -1969,10 +1884,7 @@ function renderPlace(p, opts = {}) {
     return card;
   }
 
-  if (imm && imm.verified === false) {
-    card.querySelector(".reviews-head span").textContent = "후기 검증 상태";
-    list.innerHTML = '<div class="none">검증 서비스를 사용할 수 없어 원시 후기를 숨겼어요. 장소 정보는 계속 이용할 수 있습니다.</div>';
-  } else if (p._reviewError) {
+  if (p._reviewError) {
     list.innerHTML = '<div class="none">후기를 불러오지 못했어요. (네이버 API 키 설정을 확인해 주세요)</div>';
   } else if (realReviews.length === 0) {
     list.innerHTML = '<div class="none">광고를 걸러내니 남는 진짜 후기가 없었어요.</div>';
@@ -1981,8 +1893,7 @@ function renderPlace(p, opts = {}) {
       const d = document.createElement("div");
       d.className = "review";
       const date = rv.date ? `${rv.date.slice(0, 4)}.${rv.date.slice(4, 6)}` : "";
-      d.innerHTML = `<a target="_blank" rel="noopener"></a><p></p><div class="rmeta"></div>`;
-      d.querySelector("a").href = safeHttpUrl(rv.link, "#");
+      d.innerHTML = `<a href="${rv.link}" target="_blank" rel="noopener"></a><p></p><div class="rmeta"></div>`;
       d.querySelector("a").textContent = rv.title;
       d.querySelector("p").textContent = rv.description;
       d.querySelector(".rmeta").textContent = [rv.blogger, date].filter(Boolean).join(" · ");
@@ -2028,8 +1939,7 @@ function renderOverseasReviews(list, p, krRealReviews) {
       const d = document.createElement("div");
       d.className = "review";
       const date = rv.date ? `${rv.date.slice(0, 4)}.${rv.date.slice(4, 6)}` : "";
-      d.innerHTML = `<a target="_blank" rel="noopener"></a><p></p><div class="rmeta"></div>`;
-      d.querySelector("a").href = safeHttpUrl(rv.link, "#");
+      d.innerHTML = `<a href="${rv.link}" target="_blank" rel="noopener"></a><p></p><div class="rmeta"></div>`;
       d.querySelector("a").textContent = rv.title;
       d.querySelector("p").textContent = rv.description;
       d.querySelector(".rmeta").textContent = [rv.blogger, date].filter(Boolean).join(" · ");
@@ -2056,13 +1966,13 @@ async function loadChampionSummary(p, card) {
   else card.appendChild(box);
 
   const name = p.place_name || p.name || "";
-  const cacheKey = "sum2:" + p.id;
+  const cacheKey = "sum:" + p.id;
   let summary = null;
   try { summary = localStorage.getItem(cacheKey); } catch (_) {}
 
   if (!summary) {
     try {
-      const r = await apiFetch("/api/summary", {
+      const r = await fetch("/api/summary", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, reviews: reviews.map((rv) => ({ title: rv.title, description: rv.description })) }),
       });
@@ -2234,9 +2144,7 @@ async function renderResultMapOverseas(list) {
 
 /* 국내 영업시간 배지 (구글 조회, 하루 단위 캐시) */
 async function loadHoursBadge(p, target) {
-  const today = new Intl.DateTimeFormat("en-CA", {
-    year: "numeric", month: "2-digit", day: "2-digit",
-  }).format(new Date());
+  const today = new Date().toISOString().slice(0, 10);
   const cacheKey = "hours:" + p.id + ":" + today;
   let info = null;
   try { const hit = localStorage.getItem(cacheKey); if (hit) info = JSON.parse(hit); } catch (_) {}
@@ -2247,7 +2155,7 @@ async function loadHoursBadge(p, target) {
     target.appendChild(loading);
     try {
       const q = (p.place_name || "") + " " + dongOf(p.address_name || "");
-      const r = await apiFetch("/api/gplaces?mode=hours&query=" + encodeURIComponent(q));
+      const r = await fetch("/api/gplaces?mode=hours&query=" + encodeURIComponent(q));
       info = await r.json();
       try { localStorage.setItem(cacheKey, JSON.stringify(info)); } catch (_) {}
     } catch (_) { info = null; }
@@ -2314,7 +2222,7 @@ async function openOrderHelper(p) {
 
   if (!phrases) {
     try {
-      const r = await apiFetch("/api/order-helper", {
+      const r = await fetch("/api/order-helper", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: p.name, address: p.address, menu }),
       });
@@ -2361,10 +2269,10 @@ function starsEl(stars) {
 
 /* ───────── 계층 분류 ───────── */
 // 각 장소가 exact / broad / broader 중 어디에 속하는지 판정
-function classifyTier(p, tiers, reviewSource = null) {
+function classifyTier(p, tiers) {
   if (!tiers) return "broad";
   const hay = normText(p.place_name) + " " + normText(p.category_name) +
-    " " + (reviewSource || p._reviews || []).map((r) => normText(r.title)).join(" ");
+    " " + (p._reviews || []).map((r) => normText(r.title)).join(" ");
   const ex = normText(tiers.exact || "");
   const br = normText(tiers.broad || "");
   if (ex && hay.includes(ex)) return "exact";
@@ -2399,14 +2307,10 @@ function championScore(p) {
 }
 function pickChampion(list) {
   if (!list.length) return null;
-  const eligible = list.filter((p) => {
-    const imm = p._imm || {};
-    if (imm.verified === false || typeof imm.stars !== "number") return false;
-    const overseas = p.rating != null && p.place_name === undefined;
-    return overseas ? (imm.googleRatingCount || p.ratingCount || 0) >= 20 : (imm.realCount || 0) >= 3;
-  });
-  if (!eligible.length) return null;
-  return eligible.slice().sort((a, b) => championScore(b) - championScore(a))[0];
+  // 진짜후기가 최소 2개 이상인 곳 중에서만 1등 선정 (증거 부족 배제)
+  const eligible = list.filter((p) => (p._imm.realCount || 0) >= 2);
+  const pool = eligible.length ? eligible : list;
+  return pool.slice().sort((a, b) => championScore(b) - championScore(a))[0];
 }
 
 /* 결과 렌더: 1등 카드 → 필터 → 계층 그룹 */
@@ -2417,17 +2321,10 @@ const TIER_LABEL = {
 };
 function renderResults() {
   els.results.innerHTML = "";
-  const filtered = lastResults.filter((p) =>
-    minStars === 0 || (typeof p._imm.stars === "number" && p._imm.stars >= minStars));
-  const ratedCount = lastResults.filter((p) => typeof p._imm.stars === "number").length;
-  const unavailableCount = lastResults.filter((p) => p._imm.verified === false).length;
-  els.resultMeta.textContent = `${lastResults.length}곳 중 별점 근거 충분 ${ratedCount}곳` +
-    (unavailableCount ? ` · 검증 일시 중단 ${unavailableCount}곳` : "");
+  const filtered = lastResults.filter((p) => p._imm.stars >= minStars);
 
-  // ── 1등 맛집 카드 ──
-  const championVisible = champion &&
-    (minStars === 0 || (typeof champion._imm.stars === "number" && champion._imm.stars >= minStars));
-  if (championVisible) {
+  // ── 1등 맛집 카드 (필터와 무관하게 항상 최상단) ──
+  if (champion) {
     const crown = document.createElement("div");
     crown.className = "champ-banner";
     crown.innerHTML = `<span class="champ-icon">👑</span> 임슐랭 선정 1등 맛집`;
@@ -2470,12 +2367,11 @@ function renderResults() {
     if (searchMode === "overseas") { renderResultMapOverseas(filtered); return; }
   }
 
-  // ── 계층별 그룹 (1등 카드는 위에 이미 표시했으므로 중복하지 않음) ──
+  // ── 계층별 그룹 (1등은 그룹에서도 표시하되 배지로 중복 안내) ──
   const order = ["exact", "broad", "broader"];
-  let shown = championVisible ? 1 : 0;
+  let shown = 0;
   order.forEach((tier) => {
-    const group = filtered.filter((p) =>
-      (p._tier || "broad") === tier && (!championVisible || p.id !== champion.id));
+    const group = filtered.filter((p) => (p._tier || "broad") === tier);
     if (!group.length) return;
     const label = currentTiers && currentTiers[tier];
     const head = document.createElement("div");
@@ -2500,15 +2396,7 @@ function renderResults() {
 }
 
 function escapeHtml(s) {
-  return String(s || "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-}
-function safeHttpUrl(value, fallback = "#") {
-  try {
-    const u = new URL(value || fallback, window.location.href);
-    return (u.protocol === "https:" || u.protocol === "http:") ? u.href : fallback;
-  } catch (_) {
-    return fallback;
-  }
+  return (s || "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 }
 
 </script>
