@@ -1107,13 +1107,20 @@ async function runSearch() {
 
 async function runDomesticSearch(q, gen) {
   {
-    // 1) 감성 키워드 → 검색 키워드 + 매칭 동의어 + 계층 + 지역 감지 (Claude, 캐시 우선)
+    // 1) 위치 먼저 확보 — 브라우저(특히 PC)는 사용자 클릭 직후가 아니면
+    //    위치 요청을 거부할 수 있으므로, 네트워크 await 이전에 요청한다.
+    //    (검색어에 지역명이 있으면 아래에서 그 좌표로 대체)
+    const locMode = document.querySelector('input[name="locmode"]:checked').value;
+    const centerPromise = getCenter();       // 즉시 호출(제스처 컨텍스트 유지)
+    centerPromise.catch(() => {});           // 미처리 거부 경고 방지
+
+    // 2) 감성 키워드 → 검색 키워드 + 매칭 동의어 + 계층 + 지역 감지 (Claude, 캐시 우선)
     const { keywords, match, food, theme, tiers, region, converted } = await convertKeywords(q);
     if (gen !== searchGen) return;
     renderTicket(q, keywords, converted);
 
-    // 2) 기준 좌표 — 검색어에 지역명이 섞여 있으면("판교 스테이크") 그 지역을 우선 사용
-    let center;
+    // 3) 기준 좌표 — 검색어에 지역명이 섞여 있으면("판교 스테이크") 그 지역을 우선 사용
+    let center = null;
     if (region) {
       center = await geocodeByKeyword(region);
       if (center) {
@@ -1121,7 +1128,7 @@ async function runDomesticSearch(q, gen) {
         els.locStatus.className = "loc-status";
       }
     }
-    if (!center) center = await getCenter();
+    if (!center) center = await centerPromise; // 위에서 미리 요청해둔 위치 사용
     if (gen !== searchGen) return;
 
     // 3) 카카오 장소 검색 (키워드별 병렬)
@@ -1187,6 +1194,13 @@ async function runOverseasSearch(q, gen) {
   let searchInput = q;
   const radius = Number(document.querySelector('input[name="radius"]:checked').value) || 15000;
 
+  // 현재 위치 모드면 위치 요청을 먼저 시작 (네트워크 await 전에 — PC 브라우저 대응)
+  let gpsPromise = null;
+  if (locMode !== "manual") {
+    gpsPromise = getGpsQuietly();
+    gpsPromise.catch(() => {});
+  }
+
   if (locMode === "manual") {
     // 구글 장소 검색으로 정확한 좌표를 이미 선택했다면 그걸 사용
     if (manualCenter) {
@@ -1226,7 +1240,7 @@ async function runOverseasSearch(q, gen) {
     } else {
       // 현재 위치(현지) 기반 — 국내처럼 반경 검색
       els.loading.innerHTML = '<div class="spinner"></div>현재 위치를 확인하는 중…';
-      try { coords = await getGpsQuietly(); }
+      try { coords = await gpsPromise; }
       catch (_) {
         showState(null);
         els.locStatus.textContent = "현재 위치를 가져오지 못했어요. '🌏 지역으로 검색'으로 도시명을 입력해 주세요.";
@@ -1372,7 +1386,7 @@ function getGpsQuietly() {
     navigator.geolocation.getCurrentPosition(
       (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
       () => reject(),
-      { enableHighAccuracy: false, timeout: 5000, maximumAge: 600000 }
+      { enableHighAccuracy: false, timeout: 15000, maximumAge: 600000 }
     );
   });
 }
@@ -1510,7 +1524,8 @@ function getCenter() {
 
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) {
-      reject(new Error("이 브라우저는 위치 기능을 지원하지 않아요. '직접 입력'을 사용해 주세요."));
+      switchToManualLocation("이 브라우저는 위치 기능을 지원하지 않아요. 아래에 역·동네 이름을 입력해 주세요.");
+      reject(new Error("이 브라우저는 위치 기능을 지원하지 않아요. 아래에 장소를 입력해 주세요."));
       return;
     }
     navigator.geolocation.getCurrentPosition(
@@ -1518,10 +1533,29 @@ function getCenter() {
         els.locStatus.textContent = "기준 위치: 현재 내 위치";
         resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude });
       },
-      () => reject(new Error("위치 권한을 확인해 주세요. 또는 '직접 입력'으로 검색할 수 있어요.")),
-      { enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 }
+      (err) => {
+        // PC는 GPS가 없어 실패/부정확이 잦다 → 장소 검색으로 자연스럽게 유도
+        let msg;
+        if (err && err.code === 1) msg = "위치 권한이 차단돼 있어요. 주소창 왼쪽 자물쇠 → 위치 허용으로 바꾸거나, 아래에 역·동네 이름을 입력해 주세요.";
+        else if (err && err.code === 3) msg = "위치 확인이 오래 걸려요(PC는 GPS가 없어 자주 실패해요). 아래에 역·동네 이름을 입력해 주세요.";
+        else msg = "위치를 가져오지 못했어요(PC는 GPS가 없어 자주 실패해요). 아래에 역·동네 이름을 입력해 주세요.";
+        switchToManualLocation(msg);
+        reject(new Error(msg));
+      },
+      { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 }
     );
   });
+}
+
+/* 위치 실패 시 '장소로 검색' 모드로 자동 전환하고 안내 */
+function switchToManualLocation(msg) {
+  const manualRadio = document.querySelector('input[name="locmode"][value="manual"]');
+  if (manualRadio) manualRadio.checked = true;
+  els.locInputRow.classList.add("show");
+  renderLocQuick();
+  els.locStatus.textContent = msg;
+  els.locStatus.className = "loc-status err";
+  try { els.locInput.focus(); } catch (_) {}
 }
 
 /* ───────── 2) 키워드 변환 (Claude + localStorage 캐시) ───────── */
