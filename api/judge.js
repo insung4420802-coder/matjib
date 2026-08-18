@@ -25,7 +25,7 @@ export default async function handler(req, res) {
     id: String(p.id || "").slice(0, 120),
     placeName: String(p.placeName || "").slice(0, 160),
     reviews: filterReviewsForPlace(
-      (Array.isArray(p.reviews) ? p.reviews : []).slice(0, 30).map((r) => ({
+      (Array.isArray(p.reviews) ? p.reviews : []).slice(0, 50).map((r) => ({
         ...r,
         title: String(r.title || "").slice(0, 240),
         description: String(r.description || "").slice(0, 700),

@@ -27,7 +27,7 @@ export default async function handler(req, res) {
 
   try {
     const url = "https://openapi.naver.com/v1/search/blog.json?query=" +
-      encodeURIComponent(query) + "&display=30&sort=sim";
+      encodeURIComponent(query) + "&display=50&sort=sim";
     const r = await fetchWithTimeout(url, {
       headers: { "X-Naver-Client-Id": id, "X-Naver-Client-Secret": secret },
     }, 10000);

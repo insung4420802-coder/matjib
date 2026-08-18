@@ -205,7 +205,7 @@ export default async function handler(req, res) {
       mapUrl: p.googleMapsUri || "",
       priceLevel: p.priceLevel || null, // PRICE_LEVEL_INEXPENSIVE ~ VERY_EXPENSIVE
       ...hoursInfo(p.currentOpeningHours, p.utcOffsetMinutes),
-      reviews: (p.reviews || []).slice(0, 3).map((rv) => ({
+      reviews: (p.reviews || []).slice(0, 5).map((rv) => ({
         author: rv.authorAttribution?.displayName || "",
         text: rv.originalText?.text || rv.text?.text || "",
         lang: rv.originalText?.languageCode || rv.text?.languageCode || "",
