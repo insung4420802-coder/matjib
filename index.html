@@ -182,6 +182,32 @@
   .btn-search:hover { background: var(--broth-deep); }
   .btn-search:disabled { background: #cfc7bb; cursor: default; }
 
+  .menu-choice {
+    margin-top: 12px; padding: 13px; border: 1.5px solid #e2cda3;
+    border-radius: 12px; background: #fffaf0;
+  }
+  .menu-choice[hidden] { display: none; }
+  .menu-choice-title { font-size: 14px; font-weight: 700; color: var(--ink); }
+  .menu-choice-title span { display: block; margin-top: 3px; color: var(--ink-soft); font-size: 12px; font-weight: 500; }
+  .menu-choice-chips { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+  .menu-choice-chip {
+    font: inherit; font-size: 13.5px; font-weight: 700; color: var(--broth-deep);
+    background: #fff; border: 1.5px solid #dfc48f; border-radius: 999px;
+    padding: 8px 13px; cursor: pointer;
+  }
+  .menu-choice-chip:hover { background: var(--broth); border-color: var(--broth); color: #fff; }
+  .menu-custom-label { margin-top: 12px; font-size: 12.5px; color: var(--ink-soft); }
+  .menu-custom-row { display: flex; gap: 7px; margin-top: 6px; }
+  .menu-custom-row input {
+    flex: 1; min-width: 0; font: inherit; font-size: 15px; padding: 10px 12px;
+    border: 1.5px solid var(--line); border-radius: 9px; background: #fff;
+  }
+  .menu-custom-row button {
+    flex-shrink: 0; font: inherit; font-size: 13.5px; font-weight: 700;
+    padding: 0 13px; border: 0; border-radius: 9px; color: #fff; background: var(--kim); cursor: pointer;
+  }
+  .menu-choice-hint { min-height: 16px; margin-top: 6px; font-size: 12px; color: var(--broth-deep); }
+
   .options { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; align-items: center; }
   .opt-label { font-size: 12.5px; color: var(--ink-soft); margin-right: 2px; }
   .chip { position: relative; }
@@ -582,7 +608,7 @@
   }
   .review a:hover { color: var(--broth-deep); text-decoration: underline; }
   .review p { font-size: 13px; color: var(--ink-soft); margin-top: 2px;
-    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   .review .rmeta { font-size: 11.5px; color: #a89f93; margin-top: 2px; }
   .reviews .loading, .reviews .none { font-size: 13px; color: #a89f93; margin-top: 8px; }
 
@@ -639,6 +665,19 @@
     <div class="search-row">
       <input id="query" type="search" placeholder="예) 낙지 들어간 얼큰한 짬뽕" enterkeyhint="search" />
       <button id="btnSearch" class="btn-search">찾기</button>
+    </div>
+
+    <div id="menuChoice" class="menu-choice" hidden aria-live="polite">
+      <div class="menu-choice-title">어떤 메뉴로 집중해서 찾을까요?
+        <span>하나를 고르면 그 메뉴만 정확하게 검색합니다.</span>
+      </div>
+      <div id="menuChoiceChips" class="menu-choice-chips" aria-label="추천 메뉴 후보"></div>
+      <div class="menu-custom-label">원하는 메뉴가 목록에 없나요? 직접 입력해 주세요.</div>
+      <div class="menu-custom-row">
+        <input id="customMenu" type="text" maxlength="40" placeholder="예) 알탕, 탄탄면, 똠얌꿍" aria-label="직접 메뉴 입력" enterkeyhint="search" />
+        <button id="btnCustomMenu" type="button">이 메뉴로 검색</button>
+      </div>
+      <div id="menuChoiceHint" class="menu-choice-hint"></div>
     </div>
 
     <div class="options" role="radiogroup" aria-label="검색 반경">
@@ -741,6 +780,7 @@ let gmapsLoading = null;        // 구글맵 JS 로딩 프라미스
 let activeController = null;    // 새 검색/모드 전환 시 이전 네트워크 요청 취소
 let compareIds = new Set();     // 현재 검색에서 비교할 맛집(최대 3곳)
 let favFolderFilter = "전체";   // 즐겨찾기 폴더 화면 필터
+let pendingMenuChoice = null;   // 추상 검색어를 구체 메뉴로 고르는 중인 상태
 
 const $ = (id) => document.getElementById(id);
 
@@ -761,6 +801,8 @@ async function apiFetch(url, options = {}, canRetry = true) {
 }
 const els = {
   query: $("query"), btn: $("btnSearch"),
+  menuChoice: $("menuChoice"), menuChoiceChips: $("menuChoiceChips"),
+  customMenu: $("customMenu"), btnCustomMenu: $("btnCustomMenu"), menuChoiceHint: $("menuChoiceHint"),
   locInputRow: $("locInputRow"), locInput: $("locInput"), locStatus: $("locStatus"),
   btnAddr: $("btnAddr"), btnSearchHere: $("btnSearchHere"), locQuick: $("locQuick"),
   modeGpsLabel: $("modeGpsLabel"), modeManualLabel: $("modeManualLabel"), locHint: $("locHint"),
@@ -831,9 +873,14 @@ function renderLocQuick() {
   });
 }
 
-els.btn.addEventListener("click", runSearch);
+els.btn.addEventListener("click", () => runSearch());
 els.query.addEventListener("keydown", (e) => { if (e.key === "Enter") runSearch(); });
+els.query.addEventListener("input", () => {
+  if (pendingMenuChoice && els.query.value.trim() !== pendingMenuChoice.originalQuery) hideMenuChoice();
+});
 els.locInput.addEventListener("keydown", (e) => { if (e.key === "Enter") runSearch(); });
+els.btnCustomMenu.addEventListener("click", searchCustomMenu);
+els.customMenu.addEventListener("keydown", (e) => { if (e.key === "Enter") searchCustomMenu(); });
 els.btnSearchHere.addEventListener("click", () => {
   if (els.query.value.trim()) runSearch();
   else { els.locStatus.textContent = "먼저 위에 먹고 싶은 메뉴를 입력해 주세요."; els.locStatus.className = "loc-status err"; els.query.focus(); }
@@ -1106,6 +1153,7 @@ function setSearchMode(mode) {
   currentTiers = null;
   minStars = 0;
   resultView = "list";
+  hideMenuChoice();
   compareIds.clear();
   renderCompareDock();
   if (favMode) setFavMode(false);
@@ -1353,8 +1401,95 @@ function geocodeAddress(addr, buildingName) {
   });
 }
 
+/* ───────── 추상 검색어 → 구체 메뉴 선택 ───────── */
+function hideMenuChoice() {
+  pendingMenuChoice = null;
+  els.menuChoice.hidden = true;
+  els.menuChoiceChips.innerHTML = "";
+  els.menuChoiceHint.textContent = "";
+  els.customMenu.value = "";
+}
+
+function focusedMenuConversion(base, choice, mode) {
+  const label = String(choice?.label || choice?.query || "").trim();
+  const query = String(choice?.query || label).trim();
+  if (mode === "overseas") {
+    return {
+      ...base,
+      gquery: [query],
+      match: [...new Set([label, query].filter(Boolean))],
+      menuCandidates: [{ label, query }],
+      requiresMenuChoice: false,
+      tiers: { exact: label || query, broad: "", broader: base?.tiers?.broader || "" },
+      converted: true,
+    };
+  }
+  return {
+    ...base,
+    keywords: [query],
+    keywordPlan: [{ keyword: query, level: "exact" }],
+    match: [label || query],
+    food: [label || query],
+    menuCandidates: [{ label, query }],
+    requiresMenuChoice: false,
+    tiers: { exact: label || query, broad: "", broader: base?.tiers?.broader || "" },
+    converted: true,
+  };
+}
+
+function renderMenuChoice(originalQuery, conversion) {
+  const candidates = (conversion.menuCandidates || []).slice(0, 12);
+  pendingMenuChoice = { originalQuery, conversion, mode: searchMode };
+  els.menuChoiceChips.innerHTML = "";
+  candidates.forEach((choice) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "menu-choice-chip";
+    b.textContent = choice.label || choice.query;
+    b.addEventListener("click", () => selectMenuChoice(choice));
+    els.menuChoiceChips.appendChild(b);
+  });
+  els.menuChoiceHint.textContent = `“${originalQuery}”에 어울리는 메뉴 ${candidates.length}개를 찾았어요.`;
+  els.menuChoice.hidden = false;
+  els.menuChoice.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function selectMenuChoice(choice) {
+  const pending = pendingMenuChoice;
+  if (!pending || pending.mode !== searchMode) return;
+  const label = String(choice?.label || choice?.query || "").trim();
+  if (!label) return;
+  const preparedConversion = focusedMenuConversion(pending.conversion, choice, searchMode);
+  const originalQuery = pending.originalQuery;
+  hideMenuChoice();
+  els.query.value = label;
+  runSearch({ preparedConversion, originalQuery, resolvedMenu: true });
+}
+
+function searchCustomMenu() {
+  const menu = els.customMenu.value.trim().replace(/\s+/g, " ").slice(0, 40);
+  if (!menu) {
+    els.menuChoiceHint.textContent = "찾고 싶은 구체적인 메뉴를 입력해 주세요.";
+    els.customMenu.focus();
+    return;
+  }
+  const originalQuery = pendingMenuChoice?.originalQuery || els.query.value.trim();
+  const base = pendingMenuChoice?.conversion || {};
+  const locMode = document.querySelector('input[name="locmode"]:checked')?.value;
+  const selectedRegion = searchMode === "overseas" && locMode === "manual"
+    ? els.locInput.value.trim()
+    : "";
+  const regionHint = searchMode === "overseas" ? (selectedRegion || base.region || "") : "";
+  const preparedConversion = searchMode === "domestic"
+    ? focusedMenuConversion(base, { label: menu, query: menu }, "domestic")
+    : null;
+  hideMenuChoice();
+  els.query.value = menu;
+  runSearch({ preparedConversion, originalQuery, resolvedMenu: true, regionHint });
+}
+
 /* ───────── 검색 파이프라인 ───────── */
-async function runSearch() {
+async function runSearch(options = {}) {
   const q = els.query.value.trim();
   if (!q) return;
   if (searchMode === "domestic" && !kakaoReady) {
@@ -1368,7 +1503,6 @@ async function runSearch() {
   searching = true;
   const gen = ++searchGen; // 이 검색의 세대 번호. 이후 도착하는 옛 응답은 무시
   if (favMode) setFavMode(false); // 즐겨찾기 화면에서 검색하면 검색 화면으로 복귀
-  addHistory(q);
   minStars = 0; resultView = "list"; // 새 검색마다 필터·뷰 초기화
   compareIds.clear();
   renderCompareDock();
@@ -1380,10 +1514,33 @@ async function runSearch() {
   els.ticket.classList.remove("show");
 
   try {
+    let preparedConversion = options.preparedConversion || null;
+    if (!preparedConversion) {
+      els.loading.innerHTML = '<div class="spinner"></div>어울리는 메뉴를 고르는 중…';
+      preparedConversion = searchMode === "overseas"
+        ? await convertKeywordsOverseas(options.regionHint ? `${options.regionHint} ${q}` : q)
+        : await convertKeywords(q);
+      if (gen !== searchGen) return;
+    }
+    if (searchMode === "overseas" && options.regionHint) {
+      preparedConversion.region = options.regionHint;
+    }
+    if (searchMode === "overseas" && options.resolvedMenu) {
+      preparedConversion.focusedMenu = true;
+    }
+    if (!options.resolvedMenu && preparedConversion.requiresMenuChoice &&
+        (preparedConversion.menuCandidates || []).length > 1) {
+      showState(null);
+      renderMenuChoice(q, preparedConversion);
+      return;
+    }
+
+    hideMenuChoice();
+    addHistory(q);
     if (searchMode === "overseas") {
-      await runOverseasSearch(q, gen);
+      await runOverseasSearch(q, gen, preparedConversion, options.originalQuery || q);
     } else {
-      await runDomesticSearch(q, gen);
+      await runDomesticSearch(q, gen, preparedConversion, options.originalQuery || q);
     }
   } catch (e) {
     if (e && e.name === "AbortError") return;
@@ -1399,12 +1556,12 @@ async function runSearch() {
   }
 }
 
-async function runDomesticSearch(q, gen) {
+async function runDomesticSearch(q, gen, preparedConversion = null, originalQuery = q) {
   {
     // 1) 감성 키워드 → 검색 키워드 + 매칭 동의어 + 계층 + 지역 감지 (Claude, 캐시 우선)
-    const { keywords, keywordPlan, match, food, theme, tiers, region, converted } = await convertKeywords(q);
+    const { keywords, keywordPlan, match, food, theme, tiers, region, converted } = preparedConversion || await convertKeywords(q);
     if (gen !== searchGen) return;
-    renderTicket(q, keywords, converted);
+    renderTicket(originalQuery, keywords, converted);
 
     // 2) 기준 좌표 — 검색어에 지역명이 섞여 있으면("판교 스테이크") 그 지역을 우선 사용
     let center;
@@ -1483,13 +1640,15 @@ async function runDomesticSearch(q, gen) {
 }
 
 /* ───────── 해외 검색 파이프라인 ───────── */
-async function runOverseasSearch(q, gen) {
+async function runOverseasSearch(q, gen, preparedConversion = null, originalQuery = q) {
   const locMode = document.querySelector('input[name="locmode"]:checked').value;
   const userRegion = els.locInput.value.trim();
   let coords = null;
   let regionForSearch = "";      // 구글 검색 제한에 쓸 지역명
   let searchInput = q;
   const radius = Number(document.querySelector('input[name="radius"]:checked').value) || 15000;
+  const initialConv = preparedConversion || await convertKeywordsOverseas(q);
+  if (gen !== searchGen) return;
 
   if (locMode === "manual") {
     // 구글 장소 검색으로 정확한 좌표를 이미 선택했다면 그걸 사용
@@ -1500,7 +1659,7 @@ async function runOverseasSearch(q, gen) {
       els.locStatus.className = "loc-status";
     } else if (!userRegion) {
       // 위치칸이 비어 있어도, 검색어에 지역이 섞여 있으면("발리 스테이크") 감지해서 사용
-      const probe = await convertKeywordsOverseas(q);
+      const probe = initialConv;
       if (gen !== searchGen) return;
       if (probe.region) {
         regionForSearch = probe.region;
@@ -1520,7 +1679,7 @@ async function runOverseasSearch(q, gen) {
     }
   } else {
     // 현재 위치 모드여도, 검색어에 지역이 섞여 있으면("발리 스테이크") 그 지역을 우선
-    const probe = await convertKeywordsOverseas(q);
+    const probe = initialConv;
     if (gen !== searchGen) return;
     if (probe.region) {
       regionForSearch = probe.region;
@@ -1547,9 +1706,10 @@ async function runOverseasSearch(q, gen) {
   }
 
   // 1) 지역+메뉴 분해 (Claude)
-  const conv = await convertKeywordsOverseas(searchInput);
+  const conv = preparedConversion || await convertKeywordsOverseas(searchInput);
   if (gen !== searchGen) return;
-  renderTicket(searchInput, conv.gquery, conv.converted);
+  if (!conv.region && regionForSearch) conv.region = regionForSearch;
+  renderTicket(originalQuery, conv.gquery, conv.converted);
   currentTiers = conv.tiers;
 
   // 지역 제한 문자열: 사용자가 명시한 지역 우선, 없으면 Claude가 뽑은 region
@@ -1586,11 +1746,28 @@ async function runOverseasSearch(q, gen) {
   if (gen !== searchGen) return;
 
   // 4) 적합도 + 계층
-  const terms = (conv.match && conv.match.length ? conv.match : conv.gquery).map(normText);
+  const genericTerms = new Set([
+    "restaurant", "restaurants", "food", "cuisine", "dining", "best", "recommended",
+    "맛집", "식당", "음식점", "음식", "요리", "추천", "베스트",
+  ]);
+  const regionTerms = String(conv.region || "").toLowerCase()
+    .split(/[\s,./-]+/).map(normText).filter((t) => t.length > 1);
+  const cuisineTerms = [conv.tiers?.broad, conv.tiers?.broader]
+    .map((value) => normText(String(value || "")
+      .replace(/restaurants?|cuisine|food|dining|음식점|음식|요리/gi, "")))
+    .filter(Boolean);
+  const terms = [...(conv.match && conv.match.length ? conv.match : conv.gquery), ...cuisineTerms]
+    .map(normText)
+    .filter((t) => t && !genericTerms.has(t) && !regionTerms.includes(t));
   gResults.forEach((p) => { p._rel = scoreOverseasPlace(p, terms); });
-  const maxRel = Math.max(1, ...gResults.map((p) => p._rel));
-  const candidates = gResults.filter((p) => p._rel > 0);
+  let candidates = gResults.filter((p) => p._rel > 0);
+  // 메뉴명·업종·후기 제목 일치 결과가 하나도 없을 때만 구글 원순위를 안전망으로 사용한다.
+  // 일치 결과가 있으면 무관한 일반 음식점이 높은 평점만으로 섞이지 않게 한다.
+  if (candidates.length === 0 && !conv.focusedMenu) {
+    candidates = gResults.map((p) => ({ ...p, _rel: 1 }));
+  }
   if (candidates.length === 0) { showState("none"); return; }
+  const maxRel = Math.max(1, ...candidates.map((p) => p._rel));
   candidates.forEach((p) => { p._tier = classifyTierOverseas(p, conv.tiers); });
 
   // 5) 해외 판정 (구글 평점 + 한국인 후기)
@@ -1615,7 +1792,7 @@ async function runOverseasSearch(q, gen) {
 }
 
 async function convertKeywordsOverseas(q) {
-  const cacheKey = "ovs4:" + q;
+  const cacheKey = "ovs6:" + q;
   const cached = readConversionCache(cacheKey);
   if (cached) return cached;
   try {
@@ -1632,7 +1809,11 @@ async function convertKeywordsOverseas(q) {
       }
     }
   } catch (_) {}
-  return { region: "", gquery: [q], krquery: q, match: [q], tiers: { exact: q, broad: "", broader: "" }, converted: false };
+  return {
+    region: "", gquery: [q], krquery: q, match: [q],
+    menuCandidates: [{ label: q, query: q }], requiresMenuChoice: false,
+    tiers: { exact: q, broad: "", broader: "" }, converted: false,
+  };
 }
 
 // 대략적인 한반도(남한) 경계 박스
@@ -1769,8 +1950,7 @@ function scoreOverseasPlace(p, terms) {
     const title = normText(rv.title);
     for (const t of terms) if (t && title.includes(t)) s += 2;
   }
-  // 구글 결과는 이미 메뉴로 검색된 것이므로 최소 적합도 보장
-  return s > 0 ? s : 1;
+  return s;
 }
 
 function classifyTierOverseas(p, tiers) {
@@ -1848,7 +2028,7 @@ function writeConversionCache(key, data) {
 }
 
 async function convertKeywords(q) {
-  const cacheKey = "kw6:" + q;
+  const cacheKey = "kw7:" + q;
   const cached = readConversionCache(cacheKey);
   if (cached) return cached;
 
@@ -1868,7 +2048,11 @@ async function convertKeywords(q) {
       }
     }
   } catch (_) {}
-  return { keywords: [q], match: [q], tiers: { exact: q, broad: "", broader: "" }, converted: false };
+  return {
+    keywords: [q], keywordPlan: [{ keyword: q, level: "exact" }], match: [q], food: [q], theme: [],
+    menuCandidates: [{ label: q, query: q }], requiresMenuChoice: false,
+    tiers: { exact: q, broad: "", broader: "" }, converted: false,
+  };
 }
 
 function renderTicket(orig, keywords, converted) {
@@ -2292,7 +2476,8 @@ function renderPlace(p, opts = {}) {
   } else if (realReviews.length === 0) {
     list.innerHTML = '<div class="none">광고를 걸러내니 남는 진짜 후기가 없었어요.</div>';
   } else {
-    realReviews.slice(0, 3).forEach((rv) => {
+    card.querySelector(".reviews-head span").textContent = `진짜 후기 ${Math.min(realReviews.length, 6)}개 보기`;
+    realReviews.slice(0, 6).forEach((rv) => {
       const d = document.createElement("div");
       d.className = "review";
       const date = rv.date ? `${rv.date.slice(0, 4)}.${rv.date.slice(4, 6)}` : "";
@@ -2316,9 +2501,9 @@ function renderOverseasReviews(list, p, krRealReviews) {
     const gmapLink = p.mapUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.name || "")}`;
     const head = document.createElement("div");
     head.className = "rmeta"; head.style.fontWeight = "700"; head.style.marginBottom = "4px";
-    head.textContent = "현지 리뷰";
+    head.textContent = `현지 리뷰 ${Math.min(gReviews.length, 4)}개`;
     list.appendChild(head);
-    gReviews.slice(0, 2).forEach((rv) => {
+    gReviews.slice(0, 4).forEach((rv) => {
       const d = document.createElement("a");
       d.className = "review g-review";
       d.href = gmapLink;
@@ -2327,8 +2512,8 @@ function renderOverseasReviews(list, p, krRealReviews) {
       const ko = rv.textKo || (rv.lang && rv.lang.startsWith("ko") ? rv.text : "");
       const showKo = ko || rv.text || "";
       d.innerHTML =
-        `<div class="tr-ko">${rv.textKo ? '<span class="tr-badge">번역</span>' : ""}${escapeHtml(showKo.slice(0, 180))}</div>` +
-        (rv.textKo ? `<div class="tr-orig">${escapeHtml((rv.text || "").slice(0, 120))}</div>` : "") +
+        `<div class="tr-ko">${rv.textKo ? '<span class="tr-badge">번역</span>' : ""}${escapeHtml(showKo.slice(0, 320))}</div>` +
+        (rv.textKo ? `<div class="tr-orig">${escapeHtml((rv.text || "").slice(0, 180))}</div>` : "") +
         `<div class="rmeta">${escapeHtml(rv.author || "")}${rv.rating ? " · ★" + rv.rating : ""}${rv.time ? " · " + escapeHtml(rv.time) : ""} · 구글맵에서 보기 →</div>`;
       list.appendChild(d);
     });
@@ -2337,9 +2522,9 @@ function renderOverseasReviews(list, p, krRealReviews) {
   if (krRealReviews && krRealReviews.length) {
     const head = document.createElement("div");
     head.className = "rmeta"; head.style.fontWeight = "700"; head.style.margin = "8px 0 4px";
-    head.textContent = "한국인 블로그 후기";
+    head.textContent = `한국인 블로그 후기 ${Math.min(krRealReviews.length, 4)}개`;
     list.appendChild(head);
-    krRealReviews.slice(0, 2).forEach((rv) => {
+    krRealReviews.slice(0, 4).forEach((rv) => {
       const d = document.createElement("div");
       d.className = "review";
       const date = rv.date ? `${rv.date.slice(0, 4)}.${rv.date.slice(4, 6)}` : "";

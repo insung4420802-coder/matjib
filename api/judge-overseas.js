@@ -17,7 +17,7 @@ export default async function handler(req, res) {
     id: String(p.id || "").slice(0, 160),
     rating: Math.max(0, Math.min(5, Number(p.rating) || 0)),
     ratingCount: Math.max(0, Math.min(100000000, Number(p.ratingCount) || 0)),
-    reviews: (Array.isArray(p.reviews) ? p.reviews : []).slice(0, 30).map((r) => ({
+    reviews: (Array.isArray(p.reviews) ? p.reviews : []).slice(0, 50).map((r) => ({
       ...r,
       title: String(r.title || "").slice(0, 240),
       description: String(r.description || "").slice(0, 700),

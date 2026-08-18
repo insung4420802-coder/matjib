@@ -11,7 +11,14 @@ const SYSTEM_PROMPT = `너는 카카오맵 검색 전문가다. 사용자 입력
 따라서 사용자의 의도를 파악한 뒤, 그 의도를 만족하는 "실제 존재하는 구체적 메뉴명/업종명"으로 바꿔야 한다.
 
 출력 형식 (아래 필드를 모두 포함한 JSON 객체 하나만, 다른 텍스트 절대 금지):
-{"search":["키워드1",...],"match":["단어1",...],"food":["음식단어",...],"theme":["테마단어",...],"tiers":{"exact":"정확메뉴","broad":"상위카테고리","broader":"더큰분류"},"region":"","confidence":0.0,"needsClarification":false}
+{"search":["키워드1",...],"match":["단어1",...],"food":["음식단어",...],"theme":["테마단어",...],"menuCandidates":[{"label":"사용자에게 보일 메뉴","query":"카카오 검색어"}],"requiresMenuChoice":false,"tiers":{"exact":"정확메뉴","broad":"상위카테고리","broader":"더큰분류"},"region":"","confidence":0.0,"needsClarification":false}
+
+메뉴 후보 선택 규칙 (매우 중요):
+- "얼큰한 국물", "따뜻하고 든든한 것", "아이와 먹을 음식"처럼 사용자가 특정 메뉴를 정하지 않은 추상 요청이면 requiresMenuChoice:true.
+- 추상 요청의 menuCandidates에는 서로 다른 구체적 메뉴를 8~12개 제안한다. 가능한 한 선택 폭을 넓히되 모두 실제 지도 검색에 통하는 메뉴여야 한다.
+- 각 후보의 label은 사용자가 읽을 메뉴명, query는 카카오맵에 그대로 넣을 집중 검색어다. 국내는 보통 둘이 같다.
+- 이미 "짬뽕", "마라탕", "오징어짬뽕"처럼 구체적 메뉴가 있으면 requiresMenuChoice:false. menuCandidates에는 해당 메뉴 하나만 넣는다.
+- 사용자가 후보 하나를 고르면 검색엔진에는 그 후보의 query 하나만 전달되므로, 후보끼리 합치거나 "맛집"을 붙이지 않는다.
 
 테마 처리 규칙 (중요):
 - "바다가 보이는", "분위기 좋은", "아이랑 가기 좋은" 같은 테마가 있으면, 지도/후기에서 실제로 쓰이는 말로 변환한다:
@@ -47,15 +54,15 @@ confidence/needsClarification 규칙:
 
 예시 1
 입력: 오징어 들어간 짬뽕
-출력: {"search":["오징어짬뽕","해물짬뽕","짬뽕"],"match":["오징어짬뽕","짬뽕","오징어","해물","중식","중국집"],"food":["오징어짬뽕","해물짬뽕","짬뽕","오징어","해물","중식"],"theme":[],"tiers":{"exact":"오징어짬뽕","broad":"짬뽕","broader":"중식"},"region":"","confidence":0.95,"needsClarification":false}
+출력: {"search":["오징어짬뽕","해물짬뽕","짬뽕"],"match":["오징어짬뽕","짬뽕","오징어","해물","중식","중국집"],"food":["오징어짬뽕","해물짬뽕","짬뽕","오징어","해물","중식"],"theme":[],"menuCandidates":[{"label":"오징어짬뽕","query":"오징어짬뽕"}],"requiresMenuChoice":false,"tiers":{"exact":"오징어짬뽕","broad":"짬뽕","broader":"중식"},"region":"","confidence":0.95,"needsClarification":false}
 
 예시 2
 입력: 아이가 좋아할만한 맛집
-출력: {"search":["돈까스","김밥","우동","피자","파스타"],"match":["돈까스","김밥","우동","피자","파스타","아이랑","키즈","어린이"],"food":["돈까스","김밥","우동","피자","파스타"],"theme":["아이랑","키즈","어린이"],"tiers":{"exact":"돈까스","broad":"분식","broader":"가족외식"},"region":"","confidence":0.65,"needsClarification":false}
+출력: {"search":["돈까스","김밥","우동","피자","파스타"],"match":["돈까스","김밥","우동","피자","파스타","아이랑","키즈","어린이"],"food":["돈까스","김밥","우동","피자","파스타"],"theme":["아이랑","키즈","어린이"],"menuCandidates":[{"label":"돈까스","query":"돈까스"},{"label":"우동","query":"우동"},{"label":"피자","query":"피자"},{"label":"파스타","query":"파스타"},{"label":"불고기","query":"불고기"},{"label":"갈비","query":"갈비"},{"label":"샤브샤브","query":"샤브샤브"},{"label":"초밥","query":"초밥"}],"requiresMenuChoice":true,"tiers":{"exact":"돈까스","broad":"분식","broader":"가족외식"},"region":"","confidence":0.65,"needsClarification":false}
 
 예시 3
 입력: 시원하게 해장할 곳
-출력: {"search":["해장국","콩나물국밥","북엇국","복국"],"match":["해장","해장국","국밥","콩나물국밥","북엇국"],"food":["해장국","콩나물국밥","북엇국","복국","국밥"],"theme":[],"tiers":{"exact":"해장국","broad":"국밥","broader":"한식"},"region":"","confidence":0.82,"needsClarification":false}
+출력: {"search":["해장국","콩나물국밥","북엇국","복국"],"match":["해장","해장국","국밥","콩나물국밥","북엇국"],"food":["해장국","콩나물국밥","북엇국","복국","국밥"],"theme":[],"menuCandidates":[{"label":"해장국","query":"해장국"},{"label":"짬뽕","query":"짬뽕"},{"label":"마라탕","query":"마라탕"},{"label":"콩나물국밥","query":"콩나물국밥"},{"label":"육개장","query":"육개장"},{"label":"순두부찌개","query":"순두부찌개"},{"label":"김치찌개","query":"김치찌개"},{"label":"감자탕","query":"감자탕"},{"label":"매운탕","query":"매운탕"},{"label":"닭개장","query":"닭개장"}],"requiresMenuChoice":true,"tiers":{"exact":"해장국","broad":"국밥","broader":"한식"},"region":"","confidence":0.82,"needsClarification":false}
 
 예시 4 (테마 검색)
 입력: 바다가 보이는 횟집
@@ -66,7 +73,7 @@ const SYSTEM_PROMPT_OVERSEAS = `너는 해외 맛집 검색 전문가다. 사용
 한국어로 입력하든 영어로 입력하든 동일하게 처리한다.
 
 출력 형식 (JSON 객체 하나만, 다른 텍스트 절대 금지):
-{"region":"도시/지역 영문명","gquery":["구글검색어1","구글검색어2"],"krquery":"네이버 블로그 검색어","match":["매칭단어",...],"tiers":{"exact":"정확메뉴","broad":"상위","broader":"계열"}}
+{"region":"도시/지역 영문명","gquery":["구글검색어1","구글검색어2"],"krquery":"네이버 블로그 검색어","match":["매칭단어",...],"menuCandidates":[{"label":"한국어 메뉴명","query":"구글 검색용 영어/현지어 메뉴"}],"requiresMenuChoice":false,"tiers":{"exact":"정확메뉴","broad":"상위","broader":"계열"}}
 
 규칙:
 - region: 검색 지역의 영문 표기 (예: "Osaka, Japan"). 지역이 불명확하면 "".
@@ -74,22 +81,70 @@ const SYSTEM_PROMPT_OVERSEAS = `너는 해외 맛집 검색 전문가다. 사용
   예: 오사카 소바 → ["soba Osaka","そば 大阪"]
 - krquery: 한국인 블로그(네이버)에서 찾을 검색어. 보통 "지역 메뉴 맛집" 한국어.
   예: "오사카 소바 맛집"
-- match: 결과 검증용 단어(한/영/현지어 메뉴명). 예: ["소바","soba","そば"]
+- match: 결과 검증용 단어(한/영/현지어 메뉴명 + 그 메뉴의 직접적인 국가/요리 계열)를 넣는다.
+  예: 소바 → ["소바","soba","そば","일식","Japanese"], 똠얌꿍 → ["똠얌꿍","tom yum","ต้มยำกุ้ง","태국","Thai"]
+- match에 지역명, "맛집", "restaurant", "food", "추천" 같은 일반 단어는 넣지 않는다.
 - 테마가 있으면("바다가 보이는 횟집") gquery에 자연어로 포함시킨다: "ocean view seafood restaurant Okinawa".
   match에도 테마 단어(오션뷰, ocean view 등)를 추가한다. 구글은 자연어 테마를 잘 이해한다.
 - tiers: exact(정확메뉴)/broad(상위분류)/broader(계열). 현지어·영어 포함 가능.
+- 특정 메뉴가 없는 추상 요청이면 requiresMenuChoice:true이고 menuCandidates를 8~12개 만든다. label은 한국어로 쉽게, query는 지역명을 뺀 영어 또는 현지어의 구체적 메뉴 검색어로 쓴다.
+- 이미 구체적 메뉴가 있으면 requiresMenuChoice:false이고 menuCandidates에는 그 메뉴 하나만 넣는다.
 
 예시 1
 입력: 오사카 소바 맛집
-출력: {"region":"Osaka, Japan","gquery":["soba Osaka","そば 大阪"],"krquery":"오사카 소바 맛집","match":["소바","soba","そば","면"],"tiers":{"exact":"소바","broad":"면요리","broader":"일식"}}
+출력: {"region":"Osaka, Japan","gquery":["soba Osaka","そば 大阪"],"krquery":"오사카 소바 맛집","match":["소바","soba","そば","면"],"menuCandidates":[{"label":"소바","query":"soba"}],"requiresMenuChoice":false,"tiers":{"exact":"소바","broad":"면요리","broader":"일식"}}
 
 예시 2
 입력: best ramen in tokyo shibuya
-출력: {"region":"Shibuya, Tokyo, Japan","gquery":["ramen Shibuya Tokyo","ラーメン 渋谷"],"krquery":"도쿄 시부야 라멘 맛집","match":["라멘","ramen","ラーメン"],"tiers":{"exact":"라멘","broad":"면요리","broader":"일식"}}
+출력: {"region":"Shibuya, Tokyo, Japan","gquery":["ramen Shibuya Tokyo","ラーメン 渋谷"],"krquery":"도쿄 시부야 라멘 맛집","match":["라멘","ramen","ラーメン"],"menuCandidates":[{"label":"라멘","query":"ramen"}],"requiresMenuChoice":false,"tiers":{"exact":"라멘","broad":"면요리","broader":"일식"}}
 
 예시 3
 입력: 다낭 반쎄오 맛집
-출력: {"region":"Da Nang, Vietnam","gquery":["banh xeo Da Nang","bánh xèo Đà Nẵng"],"krquery":"다낭 반쎄오 맛집","match":["반쎄오","banh xeo","bánh xèo"],"tiers":{"exact":"반쎄오","broad":"베트남음식","broader":"동남아"}}`;
+출력: {"region":"Da Nang, Vietnam","gquery":["banh xeo Da Nang","bánh xèo Đà Nẵng"],"krquery":"다낭 반쎄오 맛집","match":["반쎄오","banh xeo","bánh xèo"],"menuCandidates":[{"label":"반쎄오","query":"banh xeo"}],"requiresMenuChoice":false,"tiers":{"exact":"반쎄오","broad":"베트남음식","broader":"동남아"}}
+
+예시 4
+입력: 오사카에서 얼큰한 국물
+출력: {"region":"Osaka, Japan","gquery":["spicy soup Osaka"],"krquery":"오사카 얼큰한 국물 맛집","match":["국물","spicy soup"],"menuCandidates":[{"label":"매운 라멘","query":"spicy ramen"},{"label":"탄탄멘","query":"tantanmen"},{"label":"마라탕","query":"malatang"},{"label":"김치찌개","query":"kimchi stew"},{"label":"순두부찌개","query":"spicy tofu stew"},{"label":"매운 우동","query":"spicy udon"},{"label":"모츠나베","query":"motsunabe"},{"label":"짬뽕","query":"spicy seafood noodle soup"}],"requiresMenuChoice":true,"tiers":{"exact":"매운 라멘","broad":"국물요리","broader":"아시아음식"}}`;
+
+function fallbackMenuChoice(query, overseas = false) {
+  const compact = String(query || "").replace(/\s+/g, "");
+  const abstract = /(얼큰|칼칼|매콤|뜨끈|따뜻|시원|해장|국물|든든|아이|가족|야식|가볍)/.test(compact);
+  const concrete = /(짬뽕|마라탕|해장국|국밥|찌개|탕|라멘|라면|우동|소바|국수|냉면|돈까스|파스타|피자|초밥|회|고기|갈비|불고기|족발|보쌈|치킨|떡볶이|버거|샌드위치)/.test(compact);
+  if (!abstract || concrete) {
+    return { menuCandidates: [{ label: query.trim(), query: query.trim() }], requiresMenuChoice: false };
+  }
+
+  const spicySoup = [
+    ["해장국", "hangover soup"], ["짬뽕", "spicy seafood noodle soup"], ["마라탕", "malatang"],
+    ["콩나물국밥", "bean sprout soup"], ["육개장", "spicy beef soup"], ["순두부찌개", "spicy soft tofu stew"],
+    ["김치찌개", "kimchi stew"], ["감자탕", "pork backbone stew"], ["매운탕", "spicy fish stew"], ["닭개장", "spicy chicken soup"],
+  ];
+  const family = [
+    ["돈까스", "tonkatsu"], ["우동", "udon"], ["피자", "pizza"], ["파스타", "pasta"],
+    ["불고기", "bulgogi"], ["갈비", "galbi"], ["샤브샤브", "shabu shabu"], ["초밥", "sushi"],
+  ];
+  const picked = /(아이|가족)/.test(compact) ? family : spicySoup;
+  return {
+    menuCandidates: picked.map(([label, queryText]) => ({ label, query: overseas ? queryText : label })),
+    requiresMenuChoice: true,
+  };
+}
+
+function normalizeMenuCandidates(value, fallback, max = 12) {
+  const rows = Array.isArray(value) ? value : [];
+  const seen = new Set();
+  const result = [];
+  for (const item of rows) {
+    const label = String(typeof item === "string" ? item : item?.label || "").trim().slice(0, 40);
+    const query = String(typeof item === "string" ? item : item?.query || label).trim().slice(0, 100);
+    const key = label.toLowerCase().replace(/\s+/g, "");
+    if (!label || !query || seen.has(key)) continue;
+    seen.add(key);
+    result.push({ label, query });
+    if (result.length >= max) break;
+  }
+  return result.length ? result : fallback;
+}
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -105,9 +160,10 @@ export default async function handler(req, res) {
   const overseas = mode === "overseas";
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
+  const fallbackChoice = fallbackMenuChoice(query, overseas);
   const fallback = overseas
-    ? { region: "", gquery: [query.trim()], krquery: query.trim(), match: [query.trim()], tiers: { exact: query.trim(), broad: "", broader: "" }, converted: false }
-    : { keywords: [query.trim()], match: [query.trim()], tiers: { exact: query.trim(), broad: "", broader: "" }, converted: false };
+    ? { region: "", gquery: [query.trim()], krquery: query.trim(), match: [query.trim()], tiers: { exact: query.trim(), broad: "", broader: "" }, ...fallbackChoice, converted: false }
+    : { keywords: [query.trim()], keywordPlan: [{ keyword: query.trim(), level: "exact" }], match: [query.trim()], food: [query.trim()], theme: [], tiers: { exact: query.trim(), broad: "", broader: "" }, ...fallbackChoice, converted: false };
   if (!apiKey) return res.status(200).json(fallback);
 
   try {
@@ -120,7 +176,7 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: process.env.ANTHROPIC_MODEL || "claude-haiku-4-5",
-        max_tokens: 400,
+        max_tokens: 700,
         system: overseas ? SYSTEM_PROMPT_OVERSEAS : SYSTEM_PROMPT,
         messages: [{ role: "user", content: query }],
       }),
@@ -163,7 +219,9 @@ export default async function handler(req, res) {
       const tiers = tierOf(parsed);
       if (!tiers.exact) tiers.exact = gquery[0] || query.trim();
       if (gquery.length === 0) return res.status(200).json(fallback);
-      return res.status(200).json({ region, gquery, krquery, match: match.slice(0, 14), tiers, converted: true });
+      const menuCandidates = normalizeMenuCandidates(parsed.menuCandidates, fallbackChoice.menuCandidates);
+      const requiresMenuChoice = parsed.requiresMenuChoice === true && menuCandidates.length > 1;
+      return res.status(200).json({ region, gquery, krquery, match: match.slice(0, 14), menuCandidates, requiresMenuChoice, tiers, converted: true });
     }
 
     const keywords = norm(parsed.search, 5, true);
@@ -190,10 +248,13 @@ export default async function handler(req, res) {
     });
 
     const detectedRegion = (parsed.region || "").trim();
+    const menuCandidates = normalizeMenuCandidates(parsed.menuCandidates, fallbackChoice.menuCandidates);
+    const requiresMenuChoice = parsed.requiresMenuChoice === true && menuCandidates.length > 1;
     return res.status(200).json({
       keywords, keywordPlan, match: match.slice(0, 14),
       food: food.length ? food : keywords.slice(0, 8),
       theme,
+      menuCandidates, requiresMenuChoice,
       tiers, region: detectedRegion,
       confidence: Math.max(0, Math.min(1, Number(parsed.confidence) || 0.5)),
       needsClarification: parsed.needsClarification === true,
