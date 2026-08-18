@@ -550,17 +550,23 @@
   .champ-summary.loading { color: var(--ink-soft); font-size: 12.5px; }
 
   /* 목록/지도 토글 & 지도 */
-  .view-toggle { display: inline-flex; border: 1.5px solid var(--line); border-radius: 999px; overflow: hidden; background: #fff; margin-left: auto; }
+  .view-switch-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 11px 12px; border: 1.5px solid #cfc7ba; border-radius: 12px;
+    background: #f8f4ec; box-shadow: 0 3px 12px rgba(33,29,25,.06);
+  }
+  .view-switch-label { font-size: 13px; font-weight: 700; color: var(--ink); }
+  .view-toggle { display: inline-flex; border: 1.5px solid var(--line); border-radius: 999px; overflow: hidden; background: #fff; }
   .view-toggle button {
     font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer;
     background: none; border: none; color: var(--ink-soft); padding: 6px 13px;
   }
   .view-toggle button.on { background: var(--kim); color: #fff; }
-  #resultMap { width: 100%; height: 400px; border-radius: var(--radius); border: 1px solid var(--line); margin-top: 10px; }
+  #resultMap { width: 100%; height: 400px; border-radius: var(--radius); border: 1px solid var(--line); margin-top: 10px; scroll-margin-top: 76px; }
   .map-context {
     display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
     padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px;
-    background: #fff; font-size: 12.5px; color: var(--ink-soft);
+    background: #fff; font-size: 12.5px; color: var(--ink-soft); scroll-margin-top: 76px;
   }
   .map-context strong { color: var(--ink); }
   .map-context-dot {
@@ -570,6 +576,12 @@
   .map-context-dot.gps { background: #1a73e8; }
   .map-context-dot.fixed { background: #7b4fc9; border-radius: 3px; transform: rotate(45deg); }
   .map-context-help { margin-left: auto; font-size: 11.5px; }
+  @media (max-width: 520px) {
+    .view-switch-row { align-items: stretch; flex-direction: column; }
+    .view-toggle { width: 100%; }
+    .view-toggle button { flex: 1; padding: 8px 13px; }
+    .map-context-help { width: 100%; margin-left: 21px; }
+  }
   .map-list-btn { white-space: nowrap; }
   .place.map-linked-highlight {
     border-color: #7b4fc9; box-shadow: 0 0 0 3px rgba(123,79,201,.18), 0 8px 22px rgba(33,29,25,.12);
@@ -2650,16 +2662,24 @@ function appendMapContext(beforeNode = null) {
   context.className = "map-context";
   context.innerHTML = `<span class="map-context-dot ${info.fixed ? "fixed" : "gps"}"></span>` +
     `<span><strong>${info.kindLabel}</strong> · ${escapeHtml(info.label)}</span>` +
-    '<span class="map-context-help">맛집 핀을 누르면 목록 카드로 이동해요</span>';
+    '<span class="map-context-help">핀을 한 번 누르면 평점 · 같은 핀을 한 번 더 누르면 목록 이동</span>';
   if (beforeNode) els.results.insertBefore(context, beforeNode);
   else els.results.appendChild(context);
   return info;
+}
+
+function scrollResultMapIntoView() {
+  requestAnimationFrame(() => {
+    const anchor = els.results.querySelector(".map-context") || els.results.querySelector("#resultMap");
+    if (anchor) anchor.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
 }
 
 function showPlaceOnMap(p) {
   pendingMapPinId = String(p.id);
   resultView = "map";
   renderResults();
+  scrollResultMapIntoView();
 }
 
 function focusPlaceFromMap(placeId) {
@@ -2699,6 +2719,7 @@ function renderResultMap(list) {
   });
   const bounds = new kakao.maps.LatLngBounds();
   let openInfo = null;
+  let armedPlaceId = null;
 
   // 기준점: 현재 위치=파란 원, 지정 위치=보라색 마름모
   if (lastSearchCenter) {
@@ -2718,13 +2739,20 @@ function renderResultMap(list) {
     const stars = p._imm && typeof p._imm.stars === "number" ? ` ★${p._imm.stars.toFixed(1)}` : "";
     const isChamp = champion && champion.id === p.id ? "👑 " : "";
     const info = new kakao.maps.InfoWindow({
-      content: `<div style="padding:6px 10px;font-size:12px;font-weight:700;white-space:nowrap;">${isChamp}${escapeHtml(p.place_name)}${stars}</div>`,
+      content: `<div style="padding:7px 10px;font-size:12px;font-weight:700;white-space:nowrap;">${isChamp}${escapeHtml(p.place_name)}${stars}` +
+        '<div style="margin-top:3px;font-size:10px;font-weight:500;color:#766d63;">같은 핀을 한 번 더 누르면 목록으로 이동</div></div>',
     });
     kakao.maps.event.addListener(marker, "click", () => {
+      const id = String(p.id);
+      if (armedPlaceId === id) {
+        armedPlaceId = null;
+        focusPlaceFromMap(p.id);
+        return;
+      }
+      armedPlaceId = id;
       if (openInfo) openInfo.close();
       info.open(map, marker);
       openInfo = info;
-      window.setTimeout(() => focusPlaceFromMap(p.id), 180);
     });
     if (String(p.id) === pendingMapPinId) selectedMarker = { marker, info, pos };
   });
@@ -2738,7 +2766,7 @@ function renderResultMap(list) {
 
   const meta = document.createElement("div");
   meta.className = "result-meta"; meta.style.marginTop = "8px";
-  meta.textContent = `핀 ${withCoords.length}개 · 핀을 누르면 해당 맛집 목록 카드로 이동해요`;
+  meta.textContent = `핀 ${withCoords.length}개 · 첫 클릭은 평점 보기, 같은 핀을 한 번 더 누르면 목록 이동`;
   els.results.appendChild(meta);
 }
 
@@ -2803,6 +2831,7 @@ async function renderResultMapOverseas(list) {
   });
   const bounds = new g.LatLngBounds();
   let openInfo = null;
+  let armedPlaceId = null;
 
   // 기준점: 현재 위치=파란 원, 지정 위치=보라색 마름모
   if (lastSearchCenter) {
@@ -2829,13 +2858,20 @@ async function renderResultMapOverseas(list) {
     const dist = p.distance != null ? ` · ${fmtDist(p.distance)}` : "";
     const isChamp = champion && champion.id === p.id ? "👑 " : "";
     const info = new g.InfoWindow({
-      content: `<div style="font-size:12px;font-weight:700;white-space:nowrap;color:#211d19;">${isChamp}${escapeHtml(p.name)}${stars}${dist}</div>`,
+      content: `<div style="font-size:12px;font-weight:700;white-space:nowrap;color:#211d19;">${isChamp}${escapeHtml(p.name)}${stars}${dist}` +
+        '<div style="margin-top:3px;font-size:10px;font-weight:500;color:#766d63;">같은 핀을 한 번 더 누르면 목록으로 이동</div></div>',
     });
     marker.addListener("click", () => {
+      const id = String(p.id);
+      if (armedPlaceId === id) {
+        armedPlaceId = null;
+        focusPlaceFromMap(p.id);
+        return;
+      }
+      armedPlaceId = id;
       if (openInfo) openInfo.close();
       info.open({ map, anchor: marker });
       openInfo = info;
-      window.setTimeout(() => focusPlaceFromMap(p.id), 180);
     });
     if (String(p.id) === pendingMapPinId) selectedMarker = { marker, info, pos };
   });
@@ -2849,7 +2885,7 @@ async function renderResultMapOverseas(list) {
 
   const meta = document.createElement("div");
   meta.className = "result-meta"; meta.style.marginTop = "8px";
-  meta.textContent = `${centerInfo.fixed ? "🟪" : "🔵"} ${centerInfo.kindLabel} · 핀 ${withCoords.length}개 (누르면 목록 카드로 이동)`;
+  meta.textContent = `${centerInfo.fixed ? "🟪" : "🔵"} ${centerInfo.kindLabel} · 핀 ${withCoords.length}개 (첫 클릭은 평점, 같은 핀 두 번째 클릭은 목록 이동)`;
   els.results.appendChild(meta);
 }
 
@@ -3161,7 +3197,7 @@ function pickChampion(list) {
   return pool.slice().sort((a, b) => championScore(b) - championScore(a))[0];
 }
 
-/* 결과 렌더: 1등 카드 → 필터 → 계층 그룹 */
+/* 결과 렌더: 상단 보기 전환 → 필터 → 1등 카드 → 지도 또는 계층 그룹 */
 const TIER_LABEL = {
   exact: "정확히 일치",
   broad: "비슷한 종류",
@@ -3175,6 +3211,50 @@ function renderResults() {
   const unavailableCount = lastResults.filter((p) => p._imm.verified === false).length;
   els.resultMeta.textContent = `${lastResults.length}곳 중 별점 근거 충분 ${ratedCount}곳` +
     (unavailableCount ? ` · 검증 일시 중단 ${unavailableCount}곳` : "");
+
+  // ── 목록/지도 전환: 결과 수 바로 아래에서 먼저 보이게 배치 ──
+  if ((searchMode === "domestic" && kakaoReady) || searchMode === "overseas") {
+    const switchRow = document.createElement("div");
+    switchRow.className = "view-switch-row";
+    switchRow.innerHTML = '<span class="view-switch-label">결과 보기</span>';
+    const vt = document.createElement("div");
+    vt.className = "view-toggle";
+    [["list", "목록"], ["map", "지도"]].forEach(([v, label]) => {
+      const b = document.createElement("button");
+      b.type = "button"; b.textContent = label;
+      b.className = resultView === v ? "on" : "";
+      b.setAttribute("aria-pressed", String(resultView === v));
+      b.addEventListener("click", () => {
+        resultView = v;
+        if (v === "list") pendingMapPinId = null;
+        renderResults();
+        if (v === "map") scrollResultMapIntoView();
+      });
+      vt.appendChild(b);
+    });
+    switchRow.appendChild(vt);
+    els.results.appendChild(switchRow);
+  }
+
+  // ── 별점 필터와 후보 공유 ──
+  const bar = document.createElement("div");
+  bar.className = "filter-bar";
+  bar.innerHTML = '<span class="f-label">최소 별점</span>';
+  [[0, "전체"], [3, "★3+"], [4, "★4+"], [4.5, "★4.5+"], [5, "★5"]].forEach(([v, label]) => {
+    const b = document.createElement("button");
+    b.className = "filter-chip" + (minStars === v ? " on" : "");
+    b.type = "button"; b.textContent = label;
+    b.addEventListener("click", () => { minStars = v; renderResults(); });
+    bar.appendChild(b);
+  });
+  const shareListBtn = document.createElement("button");
+  shareListBtn.className = "action-chip"; shareListBtn.type = "button"; shareListBtn.textContent = "📤 후보 3곳 공유";
+  shareListBtn.addEventListener("click", () => {
+    const selected = getComparePlaces();
+    shareCandidateList(selected.length ? selected : filtered.slice(0, 3), shareListBtn);
+  });
+  bar.appendChild(shareListBtn);
+  els.results.appendChild(bar);
 
   // ── 1등 맛집 카드 ──
   const championVisible = champion &&
@@ -3195,44 +3275,7 @@ function renderResults() {
     loadChampionSummary(champion, champCard); // AI 한줄평 (비동기, 캐시)
   }
 
-  // ── 필터 바 + 목록/지도 토글 ──
-  const bar = document.createElement("div");
-  bar.className = "filter-bar";
-  bar.innerHTML = '<span class="f-label">최소 별점</span>';
-  [[0, "전체"], [3, "★3+"], [4, "★4+"], [4.5, "★4.5+"], [5, "★5"]].forEach(([v, label]) => {
-    const b = document.createElement("button");
-    b.className = "filter-chip" + (minStars === v ? " on" : "");
-    b.type = "button"; b.textContent = label;
-    b.addEventListener("click", () => { minStars = v; renderResults(); });
-    bar.appendChild(b);
-  });
-  const shareListBtn = document.createElement("button");
-  shareListBtn.className = "action-chip"; shareListBtn.type = "button"; shareListBtn.textContent = "📤 후보 3곳 공유";
-  shareListBtn.addEventListener("click", () => {
-    const selected = getComparePlaces();
-    shareCandidateList(selected.length ? selected : filtered.slice(0, 3), shareListBtn);
-  });
-  bar.appendChild(shareListBtn);
-  // 목록/지도 토글 (국내=카카오맵, 해외=구글맵)
-  if ((searchMode === "domestic" && kakaoReady) || searchMode === "overseas") {
-    const vt = document.createElement("div");
-    vt.className = "view-toggle";
-    [["list", "목록"], ["map", "지도"]].forEach(([v, label]) => {
-      const b = document.createElement("button");
-      b.type = "button"; b.textContent = label;
-      b.className = resultView === v ? "on" : "";
-      b.addEventListener("click", () => {
-        resultView = v;
-        if (v === "list") pendingMapPinId = null;
-        renderResults();
-      });
-      vt.appendChild(b);
-    });
-    bar.appendChild(vt);
-  }
-  els.results.appendChild(bar);
-
-  // ── 지도 모드 ──
+  // ── 지도 모드: 1등 카드 바로 아래에 표시 ──
   if (resultView === "map") {
     if (searchMode === "domestic" && kakaoReady) { renderResultMap(filtered); return; }
     if (searchMode === "overseas") { renderResultMapOverseas(filtered); return; }
