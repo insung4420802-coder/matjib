@@ -37,6 +37,8 @@ test("추상 검색어는 메뉴 후보와 직접 입력을 거쳐 한 메뉴로
   assert.match(html, /keywordPlan: \[\{ keyword: query, level: "exact" \}\]/);
   assert.match(html, /gquery: \[query\]/);
   assert.match(html, /menuCandidates \|\| \[\]\)\.slice\(0, 12\)/);
+  assert.match(html, /selectedRegion \|\| base\.region \|\| ""/);
+  assert.match(html, /preparedConversion\.region = options\.regionHint/);
 });
 
 test("키워드 API는 얼큰한 국물에 충분한 선택 후보를 반환한다", async () => {
