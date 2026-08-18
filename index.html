@@ -112,6 +112,16 @@
   }
   .fav-folder-chip.on { color: #fff; background: var(--kim); border-color: var(--kim); }
   .fav-add-folder { color: var(--kim); border-style: dashed; }
+  .fav-new-folder { display: inline-flex; align-items: center; gap: 5px; }
+  .fav-new-folder input {
+    width: 130px; font: inherit; font-size: 12.5px; padding: 7px 9px;
+    border: 1.5px solid var(--kim); border-radius: 8px; background: #fff;
+  }
+  .fav-new-folder button {
+    font: inherit; font-size: 12px; font-weight: 700; cursor: pointer;
+    padding: 7px 9px; border-radius: 8px; border: 1.5px solid var(--line); background: #fff;
+  }
+  .fav-new-folder .save-folder { color: #fff; background: var(--kim); border-color: var(--kim); }
   .fav-tools {
     margin-top: 13px; padding: 12px; border-radius: 10px;
     background: #f8f6f1; border: 1px solid var(--line);
@@ -963,15 +973,35 @@ function saveFavFolders(folders) {
   const clean = [...new Set((folders || []).map(cleanFolderName).filter(Boolean))];
   try { localStorage.setItem(FFOLDER_KEY, JSON.stringify(clean)); } catch (_) {}
 }
-function addFavFolder() {
-  const entered = window.prompt("새 즐겨찾기 폴더 이름을 입력해 주세요.\n예: 부모님과, 여행, 재방문");
-  const name = cleanFolderName(entered);
+function createFavFolder(value) {
+  const name = cleanFolderName(value);
   if (!name) return null;
   const folders = getFavFolders();
   if (!folders.includes(name)) saveFavFolders([...folders, name]);
   favFolderFilter = name;
   renderFavView();
   return name;
+}
+function showNewFolderComposer() {
+  const existing = els.favFolderBar.querySelector(".fav-new-folder input");
+  if (existing) { existing.focus(); return; }
+  const form = document.createElement("form");
+  form.className = "fav-new-folder";
+  const input = document.createElement("input");
+  input.type = "text"; input.maxLength = 20; input.placeholder = "예) 오사카 여행";
+  input.setAttribute("aria-label", "새 폴더 이름");
+  const save = document.createElement("button");
+  save.type = "submit"; save.className = "save-folder"; save.textContent = "만들기";
+  const cancel = document.createElement("button");
+  cancel.type = "button"; cancel.textContent = "취소";
+  cancel.addEventListener("click", () => form.remove());
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    if (!createFavFolder(input.value)) input.focus();
+  });
+  form.append(input, save, cancel);
+  els.favFolderBar.appendChild(form);
+  input.focus();
 }
 function updateFavMeta(id, patch) {
   const f = getFavs();
@@ -1131,7 +1161,7 @@ function renderFavView() {
   });
   const add = document.createElement("button");
   add.type = "button"; add.className = "fav-add-folder"; add.textContent = "+ 새 폴더";
-  add.addEventListener("click", addFavFolder);
+  add.addEventListener("click", showNewFolderComposer);
   els.favFolderBar.appendChild(add);
 
   els.favMeta.textContent = allFavs.length
@@ -1165,17 +1195,7 @@ function appendFavTools(card, p, folders) {
     option.selected = folder === (p.folder || "기본");
     select.appendChild(option);
   });
-  const newOption = document.createElement("option");
-  newOption.value = "__new__"; newOption.textContent = "+ 새 폴더"; select.appendChild(newOption);
   select.addEventListener("change", () => {
-    if (select.value === "__new__") {
-      const created = addFavFolder();
-      if (created) {
-        updateFavMeta(p.id, { folder: created });
-        renderFavView();
-      }
-      return;
-    }
     updateFavMeta(p.id, { folder: select.value });
     renderFavView();
   });
