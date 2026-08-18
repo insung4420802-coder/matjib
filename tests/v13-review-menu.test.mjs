@@ -42,6 +42,8 @@ test("추상 검색어는 메뉴 후보와 직접 입력을 거쳐 한 메뉴로
   assert.match(html, /preparedConversion\.focusedMenu = true/);
   assert.match(html, /genericTerms\.has\(t\)/);
   assert.match(html, /regionTerms\.includes\(t\)/);
+  assert.match(html, /const cuisineTerm = normText/);
+  assert.match(html, /conv\.tiers\?\.broad/);
   assert.match(html, /let candidates = gResults\.filter\(\(p\) => p\._rel > 0\)/);
   assert.match(html, /candidates\.length === 0 && !conv\.focusedMenu/);
 });
