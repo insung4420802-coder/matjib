@@ -81,7 +81,9 @@ const SYSTEM_PROMPT_OVERSEAS = `너는 해외 맛집 검색 전문가다. 사용
   예: 오사카 소바 → ["soba Osaka","そば 大阪"]
 - krquery: 한국인 블로그(네이버)에서 찾을 검색어. 보통 "지역 메뉴 맛집" 한국어.
   예: "오사카 소바 맛집"
-- match: 결과 검증용 단어(한/영/현지어 메뉴명). 예: ["소바","soba","そば"]
+- match: 결과 검증용 단어(한/영/현지어 메뉴명 + 그 메뉴의 직접적인 국가/요리 계열)를 넣는다.
+  예: 소바 → ["소바","soba","そば","일식","Japanese"], 똠얌꿍 → ["똠얌꿍","tom yum","ต้มยำกุ้ง","태국","Thai"]
+- match에 지역명, "맛집", "restaurant", "food", "추천" 같은 일반 단어는 넣지 않는다.
 - 테마가 있으면("바다가 보이는 횟집") gquery에 자연어로 포함시킨다: "ocean view seafood restaurant Okinawa".
   match에도 테마 단어(오션뷰, ocean view 등)를 추가한다. 구글은 자연어 테마를 잘 이해한다.
 - tiers: exact(정확메뉴)/broad(상위분류)/broader(계열). 현지어·영어 포함 가능.
