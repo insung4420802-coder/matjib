@@ -1,13 +1,20 @@
-# MAINTENANCE.md — 임슐랭 가이드 v14 인수인계 문서
+# MAINTENANCE.md — 임슐랭 가이드 v15 인수인계 문서
 
 > 이 문서 하나를 붙여넣으면 어떤 AI 모델/개발자와 대화하든 프로젝트 전체 맥락이 전달되도록 작성됨.
-> 최종 갱신: 2026-08 (v14 기준)
+> 최종 갱신: 2026-08 (v15 기준)
+
+## v15 핵심 변경
+
+- `renderResults`는 보기 전환 → 별점 필터 → 1등 카드 → 지도/목록 순으로 렌더한다. 지도 모드의 지도는 1등 카드 바로 아래에 붙는다.
+- `showPlaceOnMap`은 해당 핀 정보창을 연 뒤 `scrollResultMapIntoView`로 지도 영역을 화면 상단에 맞춘다.
+- 카카오·구글 지도 렌더마다 `armedPlaceId`를 두어 첫 핀 클릭은 정보창만 열고, 같은 핀의 두 번째 클릭만 `focusPlaceFromMap`을 실행한다.
+- 회귀 검사는 `tests/v15-map-layout.test.mjs`에 있다. API 호출 수와 기존 검색·별점 로직은 변하지 않는다.
 
 ## v14 핵심 변경
 
 - `lastSearchCenter`에 `kind(gps/manual/query)`와 `label`을 저장해 지도 기준점을 구분한다.
 - 현재 위치는 파란 원, 지정·검색 위치는 보라색 마름모로 표시한다.
-- `focusPlaceFromMap`은 핀 클릭을 목록 카드 이동·강조로 연결한다.
+- `focusPlaceFromMap`은 두 번째 핀 클릭을 목록 카드 이동·강조로 연결한다.
 - `showPlaceOnMap`은 목록 카드의 지도 버튼을 해당 핀 정보창으로 연결한다.
 - 회귀 검사는 `tests/v14-map-link.test.mjs`에 있다. 지도 API 호출 수는 변하지 않는다.
 
