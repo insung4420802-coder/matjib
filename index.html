@@ -1752,9 +1752,11 @@ async function runOverseasSearch(q, gen, preparedConversion = null, originalQuer
   ]);
   const regionTerms = String(conv.region || "").toLowerCase()
     .split(/[\s,./-]+/).map(normText).filter((t) => t.length > 1);
-  const cuisineTerm = normText(String(conv.tiers?.broad || "")
-    .replace(/restaurants?|cuisine|food|dining|음식점|음식|요리/gi, ""));
-  const terms = [...(conv.match && conv.match.length ? conv.match : conv.gquery), cuisineTerm]
+  const cuisineTerms = [conv.tiers?.broad, conv.tiers?.broader]
+    .map((value) => normText(String(value || "")
+      .replace(/restaurants?|cuisine|food|dining|음식점|음식|요리/gi, "")))
+    .filter(Boolean);
+  const terms = [...(conv.match && conv.match.length ? conv.match : conv.gquery), ...cuisineTerms]
     .map(normText)
     .filter((t) => t && !genericTerms.has(t) && !regionTerms.includes(t));
   gResults.forEach((p) => { p._rel = scoreOverseasPlace(p, terms); });
@@ -1790,7 +1792,7 @@ async function runOverseasSearch(q, gen, preparedConversion = null, originalQuer
 }
 
 async function convertKeywordsOverseas(q) {
-  const cacheKey = "ovs5:" + q;
+  const cacheKey = "ovs6:" + q;
   const cached = readConversionCache(cacheKey);
   if (cached) return cached;
   try {
