@@ -39,8 +39,11 @@ test("추상 검색어는 메뉴 후보와 직접 입력을 거쳐 한 메뉴로
   assert.match(html, /menuCandidates \|\| \[\]\)\.slice\(0, 12\)/);
   assert.match(html, /selectedRegion \|\| base\.region \|\| ""/);
   assert.match(html, /preparedConversion\.region = options\.regionHint/);
+  assert.match(html, /preparedConversion\.focusedMenu = true/);
+  assert.match(html, /genericTerms\.has\(t\)/);
+  assert.match(html, /regionTerms\.includes\(t\)/);
   assert.match(html, /let candidates = gResults\.filter\(\(p\) => p\._rel > 0\)/);
-  assert.match(html, /candidates = gResults\.map\(\(p\) => \(\{ \.\.\.p, _rel: 1 \}\)\)/);
+  assert.match(html, /candidates\.length === 0 && !conv\.focusedMenu/);
 });
 
 test("키워드 API는 얼큰한 국물에 충분한 선택 후보를 반환한다", async () => {
