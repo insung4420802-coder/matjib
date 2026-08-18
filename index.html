@@ -1752,7 +1752,9 @@ async function runOverseasSearch(q, gen, preparedConversion = null, originalQuer
   ]);
   const regionTerms = String(conv.region || "").toLowerCase()
     .split(/[\s,./-]+/).map(normText).filter((t) => t.length > 1);
-  const terms = (conv.match && conv.match.length ? conv.match : conv.gquery)
+  const cuisineTerm = normText(String(conv.tiers?.broad || "")
+    .replace(/restaurants?|cuisine|food|dining|음식점|음식|요리/gi, ""));
+  const terms = [...(conv.match && conv.match.length ? conv.match : conv.gquery), cuisineTerm]
     .map(normText)
     .filter((t) => t && !genericTerms.has(t) && !regionTerms.includes(t));
   gResults.forEach((p) => { p._rel = scoreOverseasPlace(p, terms); });
