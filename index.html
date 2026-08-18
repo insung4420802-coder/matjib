@@ -103,6 +103,48 @@
   .fav-btn.on { color: #e8a13a; }
   .fav-btn:active { transform: scale(1.2); }
 
+  /* ── v12 즐겨찾기 폴더·방문 메모 ── */
+  .fav-folder-bar { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; margin: 10px 0 14px; }
+  .fav-folder-chip, .fav-add-folder {
+    font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer;
+    padding: 7px 11px; border-radius: 999px; border: 1.5px solid var(--line);
+    color: var(--ink-soft); background: #fff;
+  }
+  .fav-folder-chip.on { color: #fff; background: var(--kim); border-color: var(--kim); }
+  .fav-add-folder { color: var(--kim); border-style: dashed; }
+  .fav-new-folder { display: inline-flex; align-items: center; gap: 5px; }
+  .fav-new-folder input {
+    width: 130px; font: inherit; font-size: 12.5px; padding: 7px 9px;
+    border: 1.5px solid var(--kim); border-radius: 8px; background: #fff;
+  }
+  .fav-new-folder button {
+    font: inherit; font-size: 12px; font-weight: 700; cursor: pointer;
+    padding: 7px 9px; border-radius: 8px; border: 1.5px solid var(--line); background: #fff;
+  }
+  .fav-new-folder .save-folder { color: #fff; background: var(--kim); border-color: var(--kim); }
+  .fav-tools {
+    margin-top: 13px; padding: 12px; border-radius: 10px;
+    background: #f8f6f1; border: 1px solid var(--line);
+  }
+  .fav-tools-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .fav-tools label { font-size: 12px; color: var(--ink-soft); font-weight: 700; }
+  .fav-folder-select {
+    font: inherit; font-size: 13px; padding: 7px 9px; border-radius: 8px;
+    border: 1.5px solid var(--line); background: #fff; color: var(--ink);
+  }
+  .visited-label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+  .fav-note {
+    width: 100%; min-height: 68px; resize: vertical; margin-top: 9px;
+    font: inherit; font-size: 13.5px; line-height: 1.45; padding: 9px 10px;
+    border: 1.5px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink);
+  }
+  .fav-note-actions { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; }
+  .fav-note-status { font-size: 11.5px; color: var(--ink-soft); }
+  .fav-note-save {
+    font: inherit; font-size: 12px; font-weight: 700; cursor: pointer;
+    padding: 6px 10px; border: 0; border-radius: 7px; color: #fff; background: var(--kim);
+  }
+
   /* ── 검색 폼 ── */
   .panel {
     background: var(--card);
@@ -231,6 +273,8 @@
     background: #fff; border-radius: 14px; overflow: hidden;
     box-shadow: 0 12px 40px rgba(0,0,0,.25);
   }
+  .pc-box.compare-mode { max-width: 760px; }
+  .pc-box.compare-mode .pc-embed { overflow: auto; }
   .pc-head {
     display: flex; justify-content: space-between; align-items: center;
     padding: 12px 16px; font-weight: 700; font-size: 15px;
@@ -425,6 +469,47 @@
     border: 1.5px solid var(--line); color: var(--ink); background: #fff;
   }
   .links .share-btn:hover { border-color: var(--ink-soft); }
+  .links .compare-btn.on { color: #fff; background: #e8a13a; border-color: #e8a13a; }
+
+  /* ── v12 후보 비교·목록 공유 ── */
+  .action-chip {
+    font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer;
+    background: var(--kim-soft); border: 1.5px solid #cfe0d4; color: var(--kim);
+    border-radius: 999px; padding: 6px 11px;
+  }
+  .compare-dock {
+    position: sticky; bottom: 10px; z-index: 30; margin: 14px 0;
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding: 10px 12px; border-radius: 12px; color: var(--ink);
+    background: rgba(255,255,255,.97); border: 1.5px solid #e8a13a;
+    box-shadow: 0 5px 20px rgba(33,29,25,.14);
+  }
+  .compare-dock[hidden] { display: none; }
+  .compare-dock-title { font-size: 12.5px; font-weight: 800; color: #9b6b18; }
+  .compare-names { display: flex; flex: 1; min-width: 140px; gap: 5px; flex-wrap: wrap; }
+  .compare-name { font-size: 11.5px; background: #fdf8ec; border-radius: 999px; padding: 4px 8px; }
+  .compare-dock button {
+    font: inherit; font-size: 12px; font-weight: 700; cursor: pointer;
+    padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: #fff; color: var(--ink);
+  }
+  .compare-dock .compare-open { color: #fff; background: var(--broth); border-color: var(--broth); }
+  .compare-dock .compare-open:disabled { opacity: .45; cursor: default; }
+  .compare-grid { display: grid; gap: 10px; padding: 14px; overflow-x: auto; }
+  .compare-grid.cols-2 { grid-template-columns: repeat(2, minmax(210px, 1fr)); }
+  .compare-grid.cols-3 { grid-template-columns: repeat(3, minmax(190px, 1fr)); }
+  .compare-col { border: 1.5px solid var(--line); border-radius: 12px; padding: 12px; background: #fff; }
+  .compare-col h3 { font-family: "Gowun Batang", serif; font-size: 18px; line-height: 1.3; margin-bottom: 8px; }
+  .compare-metric { display: flex; justify-content: space-between; gap: 8px; padding: 7px 0; border-top: 1px solid #eee9df; font-size: 12.5px; }
+  .compare-metric span:first-child { color: var(--ink-soft); }
+  .compare-metric b { text-align: right; }
+  .compare-map-link { display: block; margin-top: 10px; text-align: center; text-decoration: none; background: var(--kim); color: #fff; border-radius: 8px; padding: 8px; font-size: 13px; font-weight: 700; }
+  .compare-modal-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 0 14px 14px; }
+  .compare-modal-actions button { font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; padding: 8px 12px; border-radius: 8px; border: 1.5px solid var(--line); background: #fff; }
+  .compare-modal-actions .primary { background: var(--broth); border-color: var(--broth); color: #fff; }
+  @media (max-width: 640px) {
+    .compare-grid.cols-2, .compare-grid.cols-3 { grid-template-columns: repeat(var(--compare-count, 2), minmax(190px, 1fr)); }
+    .compare-dock { bottom: 6px; }
+  }
 
   /* 1등 AI 한줄평 */
   .champ-summary {
@@ -589,6 +674,7 @@
 
   <div id="favView" hidden>
     <div class="result-meta" id="favMeta" style="margin-top:18px"></div>
+    <div class="fav-folder-bar" id="favFolderBar" aria-label="즐겨찾기 폴더"></div>
     <div class="results" id="favList"></div>
   </div>
 
@@ -614,6 +700,14 @@
 
   <div id="resultMeta" class="result-meta"></div>
   <div id="results" class="results"></div>
+
+  <div id="compareDock" class="compare-dock" hidden aria-live="polite">
+    <span class="compare-dock-title">비교함 <b id="compareCount">0</b>/3</span>
+    <div id="compareNames" class="compare-names"></div>
+    <button id="compareClear" type="button">비우기</button>
+    <button id="compareShare" type="button">📤 후보 공유</button>
+    <button id="compareOpen" class="compare-open" type="button">비교하기</button>
+  </div>
 
   <div class="install-tip" id="installTip">
     <button class="install-close" id="installClose" type="button" aria-label="닫기">✕</button>
@@ -645,6 +739,8 @@ let resultView = "list";        // "list" | "map"
 let lastSearchCenter = null;    // 이번 검색의 기준 좌표 {lat,lng} (지도에 파란 점으로 표시)
 let gmapsLoading = null;        // 구글맵 JS 로딩 프라미스
 let activeController = null;    // 새 검색/모드 전환 시 이전 네트워크 요청 취소
+let compareIds = new Set();     // 현재 검색에서 비교할 맛집(최대 3곳)
+let favFolderFilter = "전체";   // 즐겨찾기 폴더 화면 필터
 
 const $ = (id) => document.getElementById(id);
 
@@ -675,7 +771,9 @@ const els = {
   setupWarn: $("setupWarn"),
   histRow: $("histRow"),
   btnFavs: $("btnFavs"), favCount: $("favCount"),
-  favView: $("favView"), favMeta: $("favMeta"), favList: $("favList"),
+  favView: $("favView"), favMeta: $("favMeta"), favList: $("favList"), favFolderBar: $("favFolderBar"),
+  compareDock: $("compareDock"), compareCount: $("compareCount"), compareNames: $("compareNames"),
+  compareClear: $("compareClear"), compareShare: $("compareShare"), compareOpen: $("compareOpen"),
   modeDom: $("modeDom"), modeOvs: $("modeOvs"), tagline: $("tagline"),
 };
 
@@ -856,15 +954,68 @@ renderHist();
 
 /* ───────── 즐겨찾기 ───────── */
 const FKEY = "imm_favs";
+const FFOLDER_KEY = "imm_fav_folders";
 let favMode = false;
 function getFavs() {
   try { return JSON.parse(localStorage.getItem(FKEY)) || {}; } catch (_) { return {}; }
 }
 function setFavs(f) { try { localStorage.setItem(FKEY, JSON.stringify(f)); } catch (_) {} }
+function cleanFolderName(value) {
+  return String(value || "").trim().replace(/\s+/g, " ").slice(0, 20);
+}
+function getFavFolders() {
+  let saved = [];
+  try { saved = JSON.parse(localStorage.getItem(FFOLDER_KEY)) || []; } catch (_) {}
+  const used = Object.values(getFavs()).map((p) => cleanFolderName(p.folder || "기본"));
+  return [...new Set(["기본", ...saved.map(cleanFolderName), ...used].filter(Boolean))];
+}
+function saveFavFolders(folders) {
+  const clean = [...new Set((folders || []).map(cleanFolderName).filter(Boolean))];
+  try { localStorage.setItem(FFOLDER_KEY, JSON.stringify(clean)); } catch (_) {}
+}
+function createFavFolder(value) {
+  const name = cleanFolderName(value);
+  if (!name) return null;
+  const folders = getFavFolders();
+  if (!folders.includes(name)) saveFavFolders([...folders, name]);
+  favFolderFilter = name;
+  renderFavView();
+  return name;
+}
+function showNewFolderComposer() {
+  const existing = els.favFolderBar.querySelector(".fav-new-folder input");
+  if (existing) { existing.focus(); return; }
+  const form = document.createElement("form");
+  form.className = "fav-new-folder";
+  const input = document.createElement("input");
+  input.type = "text"; input.maxLength = 20; input.placeholder = "예) 오사카 여행";
+  input.setAttribute("aria-label", "새 폴더 이름");
+  const save = document.createElement("button");
+  save.type = "submit"; save.className = "save-folder"; save.textContent = "만들기";
+  const cancel = document.createElement("button");
+  cancel.type = "button"; cancel.textContent = "취소";
+  cancel.addEventListener("click", () => form.remove());
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    if (!createFavFolder(input.value)) input.focus();
+  });
+  form.append(input, save, cancel);
+  els.favFolderBar.appendChild(form);
+  input.focus();
+}
+function updateFavMeta(id, patch) {
+  const f = getFavs();
+  if (!f[id]) return;
+  f[id] = { ...f[id], ...patch };
+  setFavs(f);
+}
 function isFav(id) { return !!getFavs()[id]; }
 function toggleFav(p) {
   const f = getFavs();
-  if (f[p.id]) delete f[p.id];
+  if (f[p.id]) {
+    if ((f[p.id].note || f[p.id].visited) && !window.confirm("저장한 방문 메모도 함께 삭제할까요?")) return false;
+    delete f[p.id];
+  }
   else f[p.id] = {
     id: p.id,
     // 국내(카카오)
@@ -881,11 +1032,15 @@ function toggleFav(p) {
       totalReviews: p._imm.totalReviews, realPct: p._imm.realPct,
       googleRating: p._imm.googleRating, googleRatingCount: p._imm.googleRatingCount,
     } : null,
+    folder: "기본",
+    visited: false,
+    note: "",
     savedAt: Date.now(),
   };
   setFavs(f);
   updateFavCount();
   if (favMode) renderFavView();
+  return true;
 }
 function updateFavCount() { els.favCount.textContent = Object.keys(getFavs()).length; }
 updateFavCount();
@@ -951,6 +1106,8 @@ function setSearchMode(mode) {
   currentTiers = null;
   minStars = 0;
   resultView = "list";
+  compareIds.clear();
+  renderCompareDock();
   if (favMode) setFavMode(false);
   showState("empty");
 }
@@ -974,22 +1131,103 @@ function setFavMode(on) {
   favMode = on;
   els.btnFavs.classList.toggle("on", on);
   els.favView.hidden = !on;
+  els.compareDock.hidden = on || compareIds.size === 0;
   // 검색 관련 화면 숨기기/복원
   [els.results, els.resultMeta, els.ticket].forEach((el) => { el.style.display = on ? "none" : ""; });
   if (on) {
     showState(null);
     renderFavView();
   } else {
+    renderCompareDock();
     if (!els.results.children.length) showState("empty");
   }
 }
 function renderFavView() {
-  const favs = Object.values(getFavs()).sort((a, b) => b.savedAt - a.savedAt);
+  const allFavs = Object.values(getFavs()).sort((a, b) => b.savedAt - a.savedAt);
+  const folders = getFavFolders();
+  if (favFolderFilter !== "전체" && !folders.includes(favFolderFilter)) favFolderFilter = "전체";
+  const favs = favFolderFilter === "전체"
+    ? allFavs
+    : allFavs.filter((p) => (p.folder || "기본") === favFolderFilter);
   els.favList.innerHTML = "";
-  els.favMeta.textContent = favs.length
-    ? `저장한 맛집 ${favs.length}곳 (최근 저장 순)`
+  els.favFolderBar.innerHTML = "";
+  ["전체", ...folders].forEach((folder) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "fav-folder-chip" + (favFolderFilter === folder ? " on" : "");
+    const count = folder === "전체" ? allFavs.length : allFavs.filter((p) => (p.folder || "기본") === folder).length;
+    b.textContent = `${folder} ${count}`;
+    b.addEventListener("click", () => { favFolderFilter = folder; renderFavView(); });
+    els.favFolderBar.appendChild(b);
+  });
+  const add = document.createElement("button");
+  add.type = "button"; add.className = "fav-add-folder"; add.textContent = "+ 새 폴더";
+  add.addEventListener("click", showNewFolderComposer);
+  els.favFolderBar.appendChild(add);
+
+  els.favMeta.textContent = allFavs.length
+    ? `${favFolderFilter === "전체" ? "저장한 맛집" : favFolderFilter} ${favs.length}곳`
     : "아직 저장한 맛집이 없어요. 검색 결과에서 ★을 눌러 저장해 보세요.";
-  favs.forEach((p) => els.favList.appendChild(renderPlace(p, { compact: true })));
+  if (allFavs.length && !favs.length) {
+    const empty = document.createElement("div");
+    empty.className = "state show"; empty.innerHTML = '<div class="big">이 폴더는 비어 있어요</div>다른 폴더에서 맛집을 옮겨보세요.';
+    els.favList.appendChild(empty);
+  }
+  favs.forEach((p) => {
+    const card = renderPlace(p, { compact: true });
+    appendFavTools(card, p, folders);
+    els.favList.appendChild(card);
+  });
+}
+
+function appendFavTools(card, p, folders) {
+  const box = document.createElement("div");
+  box.className = "fav-tools";
+  const row = document.createElement("div");
+  row.className = "fav-tools-row";
+
+  const folderLabel = document.createElement("label");
+  folderLabel.textContent = "폴더 ";
+  const select = document.createElement("select");
+  select.className = "fav-folder-select"; select.setAttribute("aria-label", `${p.place_name || p.name} 폴더`);
+  folders.forEach((folder) => {
+    const option = document.createElement("option");
+    option.value = folder; option.textContent = folder;
+    option.selected = folder === (p.folder || "기본");
+    select.appendChild(option);
+  });
+  select.addEventListener("change", () => {
+    updateFavMeta(p.id, { folder: select.value });
+    renderFavView();
+  });
+  folderLabel.appendChild(select);
+
+  const visitedLabel = document.createElement("label");
+  visitedLabel.className = "visited-label";
+  const visited = document.createElement("input");
+  visited.type = "checkbox"; visited.checked = !!p.visited;
+  visited.setAttribute("aria-label", `${p.place_name || p.name} 방문 완료`);
+  visited.addEventListener("change", () => updateFavMeta(p.id, { visited: visited.checked }));
+  visitedLabel.append(visited, document.createTextNode(" 다녀왔어요"));
+  row.append(folderLabel, visitedLabel);
+
+  const note = document.createElement("textarea");
+  note.className = "fav-note"; note.maxLength = 300;
+  note.placeholder = "방문 메모를 남겨보세요. 예) 탕수육은 좋았고 주말 주차는 어려움";
+  note.value = p.note || "";
+  note.setAttribute("aria-label", `${p.place_name || p.name} 방문 메모`);
+
+  const actions = document.createElement("div");
+  actions.className = "fav-note-actions";
+  const status = document.createElement("span"); status.className = "fav-note-status"; status.textContent = "이 기기에 저장됩니다";
+  const save = document.createElement("button"); save.type = "button"; save.className = "fav-note-save"; save.textContent = "메모 저장";
+  save.addEventListener("click", () => {
+    updateFavMeta(p.id, { note: note.value.trim().slice(0, 300) });
+    status.textContent = "저장했어요 ✓";
+    setTimeout(() => { status.textContent = "이 기기에 저장됩니다"; }, 1600);
+  });
+  actions.append(status, save);
+  box.append(row, note, actions);
+  card.appendChild(box);
 }
 
 /* ───────── 주소 검색 (카카오 우편번호 서비스) ───────── */
@@ -1010,6 +1248,8 @@ document.addEventListener("keydown", (e) => {
 
 /* 해외: 구글 장소/주소 검색 오버레이 (자동완성) */
 function openGooglePlacePicker() {
+  $("pcTitle").textContent = "해외 장소 검색";
+  els.pcOverlay.querySelector(".pc-box").classList.remove("compare-mode");
   els.pcOverlay.hidden = false;
   els.pcEmbed.innerHTML = `
     <div class="gpick">
@@ -1070,6 +1310,8 @@ function openGooglePlacePicker() {
 
 function openPostcode() {
   const start = () => {
+    $("pcTitle").textContent = "주소 검색";
+    els.pcOverlay.querySelector(".pc-box").classList.remove("compare-mode");
     els.pcOverlay.hidden = false;
     els.pcEmbed.innerHTML = "";
     new daum.Postcode({
@@ -1128,6 +1370,8 @@ async function runSearch() {
   if (favMode) setFavMode(false); // 즐겨찾기 화면에서 검색하면 검색 화면으로 복귀
   addHistory(q);
   minStars = 0; resultView = "list"; // 새 검색마다 필터·뷰 초기화
+  compareIds.clear();
+  renderCompareDock();
   els.btn.disabled = true;
   els.loading.innerHTML = '<div class="spinner"></div>맛집을 찾는 중이에요…';
   showState("loading");
@@ -1855,7 +2099,7 @@ function renderPlace(p, opts = {}) {
       <a class="primary" href="${gmap}" target="_blank" rel="noopener">구글맵</a>
       <a href="${gdir}" target="_blank" rel="noopener">길찾기</a>
       <a href="https://map.naver.com/p/search/${nameQ}" target="_blank" rel="noopener">네이버검색</a>
-      ${opts.compact ? "" : '<button class="share-btn" type="button">📤 공유</button><button class="share-btn order-btn" type="button">🗣️ 주문 도우미</button>'}`;
+      ${opts.compact ? "" : '<button class="share-btn compare-btn" type="button">＋ 비교 담기</button><button class="share-btn" type="button">📤 공유</button><button class="share-btn order-btn" type="button">🗣️ 주문 도우미</button>'}`;
   } else {
     const kakaoPlaceUrl = safeHttpUrl(p.place_url, `https://map.kakao.com/?q=${nameQ}`);
     linksHtml = `
@@ -1863,7 +2107,7 @@ function renderPlace(p, opts = {}) {
       <a href="https://map.naver.com/p/search/${naverQ}" target="_blank" rel="noopener">네이버지도</a>
       <a href="kakaomap://route?ep=${p.y},${p.x}&by=CAR" rel="noopener">카카오내비</a>
       <a href="tmap://route?goalname=${nameQ}&goalx=${p.x}&goaly=${p.y}" rel="noopener">티맵</a>
-      ${opts.compact ? "" : '<button class="share-btn" type="button">📤 공유</button>'}`;
+      ${opts.compact ? "" : '<button class="share-btn compare-btn" type="button">＋ 비교 담기</button><button class="share-btn" type="button">📤 공유</button>'}`;
   }
 
   card.innerHTML = `
@@ -2012,8 +2256,15 @@ function renderPlace(p, opts = {}) {
   }
 
   // 공유 버튼: 국내=카카오맵 링크, 해외=구글맵 링크로 바로 공유
-  const shareBtn = card.querySelector(".share-btn:not(.order-btn)");
-  if (shareBtn) shareBtn.addEventListener("click", () => sharePlace(p, overseas, shareBtn));
+  const directShareBtn = [...card.querySelectorAll(".share-btn")].find((b) => !b.classList.contains("order-btn") && !b.classList.contains("compare-btn"));
+  if (directShareBtn) directShareBtn.addEventListener("click", () => sharePlace(p, overseas, directShareBtn));
+
+  const compareBtn = card.querySelector(".compare-btn");
+  if (compareBtn) {
+    compareBtn.dataset.compareId = String(p.id);
+    updateCompareButton(compareBtn, compareIds.has(String(p.id)));
+    compareBtn.addEventListener("click", () => toggleCompare(p));
+  }
 
   // 해외: 주문 도우미
   const orderBtn = card.querySelector(".order-btn");
@@ -2338,6 +2589,132 @@ async function loadHoursBadge(p, target) {
   }
 }
 
+/* ───────── v12 후보 비교·목록 공유 ───────── */
+function getComparePlaces() {
+  return [...compareIds].map((id) => lastResults.find((p) => String(p.id) === id)).filter(Boolean);
+}
+function updateCompareButton(btn, on) {
+  btn.classList.toggle("on", on);
+  btn.setAttribute("aria-pressed", String(on));
+  btn.textContent = on ? "✓ 비교 중" : "＋ 비교 담기";
+}
+function syncCompareButtons() {
+  document.querySelectorAll(".compare-btn[data-compare-id]").forEach((btn) => {
+    updateCompareButton(btn, compareIds.has(btn.dataset.compareId));
+  });
+}
+function toggleCompare(p) {
+  const id = String(p.id);
+  if (compareIds.has(id)) compareIds.delete(id);
+  else if (compareIds.size >= 3) {
+    els.locStatus.textContent = "비교는 최대 3곳까지 담을 수 있어요.";
+    els.locStatus.className = "loc-status err";
+    return;
+  } else compareIds.add(id);
+  syncCompareButtons();
+  renderCompareDock();
+}
+function renderCompareDock() {
+  const places = getComparePlaces();
+  els.compareCount.textContent = String(places.length);
+  els.compareNames.innerHTML = "";
+  places.forEach((p) => {
+    const chip = document.createElement("span");
+    chip.className = "compare-name"; chip.textContent = p.place_name || p.name || "맛집";
+    els.compareNames.appendChild(chip);
+  });
+  els.compareOpen.disabled = places.length < 2;
+  els.compareDock.hidden = favMode || places.length === 0;
+}
+els.compareClear.addEventListener("click", () => {
+  compareIds.clear(); syncCompareButtons(); renderCompareDock();
+});
+els.compareOpen.addEventListener("click", openCompareModal);
+els.compareShare.addEventListener("click", () => shareCandidateList(getComparePlaces(), els.compareShare));
+
+function candidateMapUrl(p) {
+  const name = p.place_name || p.name || "";
+  if (p.mapUrl) return p.mapUrl;
+  if (p.place_url) return p.place_url;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name)}`;
+}
+function buildCandidateShareText(places, query, location) {
+  const heading = ["🍽️ 임슐랭 후보", query ? `“${query}”` : "", location ? `· ${location}` : ""].filter(Boolean).join(" ");
+  const lines = places.map((p, index) => {
+    const imm = p._imm || {};
+    const name = p.place_name || p.name || "맛집";
+    const stars = typeof imm.stars === "number" ? `★${imm.stars.toFixed(1)}` : "별점 자료 부족";
+    const distance = p.distance ? ` · ${fmtDist(p.distance)}` : "";
+    const evidence = imm.realCount ? ` · 진짜후기 ${imm.realCount}개` : (imm.googleRatingCount ? ` · 구글리뷰 ${Number(imm.googleRatingCount).toLocaleString()}개` : "");
+    return `${index + 1}. ${name} — ${stars}${distance}${evidence}\n${candidateMapUrl(p)}`;
+  });
+  return `${heading}\n\n${lines.join("\n\n")}\n\n우리 어디로 갈까요?`;
+}
+async function shareCandidateList(places, btn) {
+  const picks = (places && places.length ? places : lastResults.slice(0, 3)).slice(0, 3);
+  if (!picks.length) return;
+  const location = manualCenter?.label || els.locInput.value.trim() || "";
+  const text = buildCandidateShareText(picks, els.query.value.trim(), location);
+  try {
+    if (navigator.share) {
+      await navigator.share({ title: `임슐랭 후보 ${picks.length}곳`, text });
+      return;
+    }
+    throw new Error("no share");
+  } catch (_) {
+    try {
+      await navigator.clipboard.writeText(text);
+      if (btn) {
+        const orig = btn.textContent; btn.textContent = "✅ 목록 복사됨";
+        setTimeout(() => { btn.textContent = orig; }, 1600);
+      }
+    } catch (__) {}
+  }
+}
+function compareMetric(label, value) {
+  return `<div class="compare-metric"><span>${escapeHtml(label)}</span><b>${escapeHtml(value || "—")}</b></div>`;
+}
+function openCompareModal() {
+  const places = getComparePlaces();
+  if (places.length < 2) return;
+  $("pcTitle").textContent = `맛집 ${places.length}곳 비교`;
+  els.pcOverlay.querySelector(".pc-box").classList.add("compare-mode");
+  els.pcOverlay.hidden = false;
+  els.pcEmbed.innerHTML = "";
+  const grid = document.createElement("div");
+  grid.className = `compare-grid cols-${places.length}`;
+  grid.style.setProperty("--compare-count", String(places.length));
+  places.forEach((p) => {
+    const imm = p._imm || {};
+    const br = imm.breakdown || {};
+    const name = p.place_name || p.name || "맛집";
+    const cat = shortCat(p.category_name || p.category || "");
+    const stars = typeof imm.stars === "number" ? `★ ${imm.stars.toFixed(1)}` : "별점 자료 부족";
+    const reviews = imm.realCount != null ? `진짜후기 ${imm.realCount}개` : (imm.googleRatingCount ? `구글리뷰 ${Number(imm.googleRatingCount).toLocaleString()}개` : "자료 없음");
+    const pct = (v) => typeof v === "number" ? `${Math.round(v * 100)}점` : "—";
+    const col = document.createElement("section");
+    col.className = "compare-col";
+    col.innerHTML = `<h3>${escapeHtml(name)}</h3>` +
+      compareMetric("분류", cat) +
+      compareMetric("임슐랭", stars) +
+      compareMetric("거리", p.distance ? fmtDist(p.distance) : "—") +
+      compareMetric("후기 근거", reviews) +
+      compareMetric("메뉴 적합도", pct(br.relevance)) +
+      compareMetric(searchMode === "overseas" ? "한국인 화제" : "광고 안 낀 후기", pct(searchMode === "overseas" ? br.krBuzz : br.authenticity)) +
+      compareMetric("주소", p.road_address_name || p.address_name || p.address || "—") +
+      `<a class="compare-map-link" target="_blank" rel="noopener" href="${safeHttpUrl(candidateMapUrl(p), "#")}">지도에서 보기</a>`;
+    grid.appendChild(col);
+  });
+  const actions = document.createElement("div");
+  actions.className = "compare-modal-actions";
+  const share = document.createElement("button"); share.type = "button"; share.className = "primary"; share.textContent = "📤 이 후보들 공유";
+  share.addEventListener("click", () => shareCandidateList(places, share));
+  const close = document.createElement("button"); close.type = "button"; close.textContent = "닫기";
+  close.addEventListener("click", () => { els.pcOverlay.hidden = true; });
+  actions.append(share, close);
+  els.pcEmbed.append(grid, actions);
+}
+
 /* 공유: 국내=카카오맵, 해외=구글맵 링크로 바로 */
 async function sharePlace(p, overseas, btn) {
   const name = p.place_name || p.name || "";
@@ -2367,6 +2744,8 @@ async function sharePlace(p, overseas, btn) {
 
 /* 해외: 현지어 주문 도우미 (온디맨드 + 캐시) */
 async function openOrderHelper(p) {
+  $("pcTitle").textContent = "현지어 주문 도우미";
+  els.pcOverlay.querySelector(".pc-box").classList.remove("compare-mode");
   els.pcOverlay.hidden = false;
   els.pcEmbed.innerHTML = '<div class="order-list"><div class="gpick-loading">주문 문장을 만드는 중…</div></div>';
   const listEl = els.pcEmbed.querySelector(".order-list");
@@ -2521,6 +2900,13 @@ function renderResults() {
     b.addEventListener("click", () => { minStars = v; renderResults(); });
     bar.appendChild(b);
   });
+  const shareListBtn = document.createElement("button");
+  shareListBtn.className = "action-chip"; shareListBtn.type = "button"; shareListBtn.textContent = "📤 후보 3곳 공유";
+  shareListBtn.addEventListener("click", () => {
+    const selected = getComparePlaces();
+    shareCandidateList(selected.length ? selected : filtered.slice(0, 3), shareListBtn);
+  });
+  bar.appendChild(shareListBtn);
   // 목록/지도 토글 (국내=카카오맵, 해외=구글맵)
   if ((searchMode === "domestic" && kakaoReady) || searchMode === "overseas") {
     const vt = document.createElement("div");
@@ -2569,6 +2955,7 @@ function renderResults() {
     meta.textContent = "이 별점 이상인 곳이 없어요. 기준을 낮춰보세요.";
     els.results.appendChild(meta);
   }
+  renderCompareDock();
 }
 
 function escapeHtml(s) {
