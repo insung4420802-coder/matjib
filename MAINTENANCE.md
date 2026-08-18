@@ -1,7 +1,16 @@
-# MAINTENANCE.md — 임슐랭 가이드 v12 인수인계 문서
+# MAINTENANCE.md — 임슐랭 가이드 v13 인수인계 문서
 
 > 이 문서 하나를 붙여넣으면 어떤 AI 모델/개발자와 대화하든 프로젝트 전체 맥락이 전달되도록 작성됨.
-> 최종 갱신: 2026-08 (v12 기준)
+> 최종 갱신: 2026-08 (v13 기준)
+
+## v13 핵심 변경
+
+- `api/keywords.js` 응답에 `menuCandidates[{label,query}]`와 `requiresMenuChoice`를 추가했다.
+- 추상 검색어는 최대 12개 메뉴 후보 또는 직접 메뉴 입력을 먼저 보여주며, 선택 뒤 장소검색에는 고른 `query` 하나만 보낸다.
+- 구체 메뉴는 선택 화면 없이 바로 검색한다. 키워드 캐시는 국내 `kw7`, 해외 `ovs5`로 올렸다.
+- 국내 후기 화면은 최대 6개, 해외는 현지 4개+한국인 4개를 표시한다. 네이버 수집 50개, 구글 장소당 현지 리뷰 최대 5개, 판정 입력 최대 50개다.
+- 호출 횟수와 애매 후기 Claude 배치 상한 40개는 유지한다. 메뉴 후보 클릭은 최초 변환 결과를 재사용한다.
+- 회귀 검사는 `tests/v13-review-menu.test.mjs`에 있다.
 
 ## v12 핵심 변경
 
@@ -66,6 +75,7 @@
 
 `index.html` 내 주요 함수:
 - `runDomesticSearch` / `runOverseasSearch`: 모드별 검색 파이프라인
+- `renderMenuChoice` / `focusedMenuConversion`: 추상 검색 후보 표시와 한 메뉴 집중 검색
 - `convertKeywords` / `convertKeywordsOverseas`: 키워드 변환 호출 (+localStorage 캐시)
 - `scorePlace(p, foodTerms, themeTerms)`: 키워드 적합도. **음식=필수, 테마=가산**
 - `classifyTier`: exact/broad/broader 계층 분류
