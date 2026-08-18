@@ -1475,7 +1475,11 @@ function searchCustomMenu() {
   }
   const originalQuery = pendingMenuChoice?.originalQuery || els.query.value.trim();
   const base = pendingMenuChoice?.conversion || {};
-  const regionHint = searchMode === "overseas" ? (base.region || "") : "";
+  const locMode = document.querySelector('input[name="locmode"]:checked')?.value;
+  const selectedRegion = searchMode === "overseas" && locMode === "manual"
+    ? els.locInput.value.trim()
+    : "";
+  const regionHint = searchMode === "overseas" ? (selectedRegion || base.region || "") : "";
   const preparedConversion = searchMode === "domestic"
     ? focusedMenuConversion(base, { label: menu, query: menu }, "domestic")
     : null;
@@ -1517,6 +1521,9 @@ async function runSearch(options = {}) {
         ? await convertKeywordsOverseas(options.regionHint ? `${options.regionHint} ${q}` : q)
         : await convertKeywords(q);
       if (gen !== searchGen) return;
+    }
+    if (searchMode === "overseas" && options.regionHint) {
+      preparedConversion.region = options.regionHint;
     }
     if (!options.resolvedMenu && preparedConversion.requiresMenuChoice &&
         (preparedConversion.menuCandidates || []).length > 1) {
