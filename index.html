@@ -2536,12 +2536,7 @@ function grabFoodUrlFor(p) {
 }
 
 function deliveryPlatformsFor(p, overseas) {
-  if (!overseas) {
-    return [
-      { id: "baemin", label: "배민에서 찾기", url: "https://www.baemin.com/" },
-      { id: "coupang-eats", label: "쿠팡이츠에서 찾기", url: "https://www.coupangeats.com/" },
-    ];
-  }
+  if (!overseas) return [];
   if (isSoutheastAsiaPlace(p)) {
     return [{ id: "grabfood", label: "GrabFood에서 찾기", url: grabFoodUrlFor(p) }];
   }
@@ -2581,19 +2576,28 @@ function renderDeliveryLinks(card, p, overseas) {
   const evidence = deliveryEvidenceFor(p, overseas);
   if (!evidence) return;
   const platforms = deliveryPlatformsFor(p, overseas);
-  if (!platforms.length) return;
+  // 국내는 앱 버튼을 제공하지 않고, 실제 후기에서 찾은 배달 정보만 배지로 남긴다.
+  if (!overseas && evidence.source !== "reviews") return;
 
   const box = document.createElement("div");
   box.className = "delivery-links";
   box.dataset.deliverySource = evidence.source;
-  const title = evidence.source === "reviews" ? "🛵 후기에서 배달 언급" : "🛵 배달앱에서 확인";
-  const note = evidence.source === "reviews"
-    ? `후기 ${evidence.mentionCount}개에서 배달 관련 표현을 찾았어요. 현재 가능 여부는 앱에서 확인해 주세요.`
-    : "현재 주소의 배달 가능 여부는 앱에서 최종 확인해 주세요.";
+  const domesticInfoOnly = !overseas && !platforms.length;
+  if (domesticInfoOnly) box.dataset.deliveryInfoOnly = "true";
+  const title = evidence.source === "reviews" ? "🛵 후기에서 배달 언급" : "🛵 배달 사이트에서 확인";
+  const note = domesticInfoOnly
+    ? `후기 ${evidence.mentionCount}개에서 배달 관련 표현을 찾았어요. 현재 가능 여부는 이용 중인 배달앱에서 확인해 주세요.`
+    : evidence.source === "reviews"
+      ? `후기 ${evidence.mentionCount}개에서 배달 관련 표현을 찾았어요. 사이트에서 현재 가능 여부를 확인해 주세요.`
+      : "현재 주소의 배달 가능 여부는 열린 사이트에서 최종 확인해 주세요.";
   box.innerHTML =
     `<div class="delivery-links-head"><span class="delivery-links-title">${title}</span>` +
-    `<span class="delivery-links-note">${note}</span></div>` +
-    '<div class="delivery-links-buttons"></div><div class="delivery-status" aria-live="polite"></div>';
+    `<span class="delivery-links-note">${note}</span></div>`;
+  if (domesticInfoOnly) {
+    card.querySelector(".links")?.after(box);
+    return;
+  }
+  box.insertAdjacentHTML("beforeend", '<div class="delivery-links-buttons"></div><div class="delivery-status" aria-live="polite"></div>');
   const buttonRow = box.querySelector(".delivery-links-buttons");
   const status = box.querySelector(".delivery-status");
   const searchText = deliverySearchText(p);
@@ -2605,12 +2609,11 @@ function renderDeliveryLinks(card, p, overseas) {
     button.textContent = platform.label;
     button.setAttribute("aria-label", `${platform.label}: ${searchText}`);
     button.addEventListener("click", () => {
-      // 새 창은 사용자 클릭 순간에 먼저 열어 팝업 차단 가능성을 낮춘다.
       window.open(platform.url, "_blank", "noopener,noreferrer");
       copyDeliverySearchText(searchText).then((copied) => {
         status.textContent = copied
-          ? `“${searchText}” 검색어를 복사했어요. 열린 앱이나 사이트에 붙여넣어 주세요.`
-          : `열린 앱이나 사이트에서 “${searchText}”을(를) 검색해 주세요.`;
+          ? `“${searchText}” 검색어를 복사했어요. 열린 사이트에 붙여넣어 주세요.`
+          : `열린 사이트에서 “${searchText}”을(를) 검색해 주세요.`;
       });
     });
     buttonRow.appendChild(button);
