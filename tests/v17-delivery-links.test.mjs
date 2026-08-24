@@ -35,9 +35,9 @@ test("배달·딜리버리·delivery 검색에서만 배달앱 영역을 켠다"
   assert.equal(context.hasIntent(), false);
 });
 
-test("국내는 배민·쿠팡이츠, 동남아는 GrabFood, 그 밖의 해외는 Uber Eats를 고른다", () => {
+test("국내 배달앱 버튼은 제거하고 동남아 GrabFood·그 밖의 해외 Uber Eats만 연결한다", () => {
   const context = deliveryContext();
-  assert.deepEqual(Array.from(context.platforms({}, false), (p) => p.id), ["baemin", "coupang-eats"]);
+  assert.deepEqual(Array.from(context.platforms({}, false)), []);
   const thailand = context.platforms({ address: "Bangkok, Thailand" }, true);
   assert.deepEqual(Array.from(thailand, (p) => p.id), ["grabfood"]);
   assert.equal(thailand[0].url, "https://food.grab.com/th/en/");
@@ -50,9 +50,15 @@ test("배달앱 검색어는 지점 구분을 위해 음식점명과 주소를 �
     context.searchText({ place_name: "맛있는분식 강남점", road_address_name: "서울 강남구 테헤란로 1" }),
     "맛있는분식 강남점 서울 강남구 테헤란로 1",
   );
+  assert.doesNotMatch(deliveryLogic, /https:\/\/www\.baemin\.com\//);
+  assert.doesNotMatch(deliveryLogic, /https:\/\/www\.coupangeats\.com\//);
+  assert.doesNotMatch(deliveryLogic, /baemin:\/\//);
+  assert.doesNotMatch(deliveryLogic, /share\.coupangeats\.com/);
+  assert.match(html, /if \(!overseas && evidence\.source !== "reviews"\) return/);
+  assert.match(html, /deliveryInfoOnly/);
   assert.match(html, /window\.open\(platform\.url, "_blank", "noopener,noreferrer"\)/);
   assert.match(html, /copyDeliverySearchText\(searchText\)/);
-  assert.match(html, /현재 주소의 배달 가능 여부는 앱에서 최종 확인/);
+  assert.match(html, /현재 가능 여부는 이용 중인 배달앱에서 확인/);
 });
 
 test("일반 검색도 후기의 확실한 배달 근거가 있으면 음식점별로 배달앱을 노출한다", () => {
