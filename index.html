@@ -575,12 +575,19 @@
   }
   .map-context-dot.gps { background: #1a73e8; }
   .map-context-dot.fixed { background: #7b4fc9; border-radius: 3px; transform: rotate(45deg); }
-  .map-context-help { margin-left: auto; font-size: 11.5px; }
+  .map-context-help { font-size: 11.5px; }
+  .map-area-search {
+    font: inherit; font-size: 12px; font-weight: 800; cursor: pointer;
+    color: #fff; background: #7b4fc9; border: 0; border-radius: 999px;
+    padding: 7px 11px; margin-left: auto; white-space: nowrap;
+  }
+  .map-area-search:disabled { opacity: .55; cursor: default; }
   @media (max-width: 520px) {
     .view-switch-row { align-items: stretch; flex-direction: column; }
     .view-toggle { width: 100%; }
     .view-toggle button { flex: 1; padding: 8px 13px; }
     .map-context-help { width: 100%; margin-left: 21px; }
+    .map-area-search { margin-left: 21px; }
   }
   .map-list-btn { white-space: nowrap; }
   .place.map-linked-highlight {
@@ -618,6 +625,50 @@
     border-radius: 999px; padding: 6px 11px;
   }
   .filter-chip.on { background: #e8a13a; border-color: #e8a13a; color: #fff; }
+  .result-controls {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 12px;
+    background: #fff; box-shadow: 0 2px 10px rgba(33,29,25,.04);
+  }
+  .result-control { min-width: 0; }
+  .result-control label, .result-control-title {
+    display: block; margin-bottom: 5px; font-size: 11.5px; font-weight: 700; color: var(--ink-soft);
+  }
+  .result-sort {
+    width: 100%; font: inherit; font-size: 13px; font-weight: 700; color: var(--ink);
+    padding: 8px 10px; border: 1.5px solid var(--line); border-radius: 9px; background: #fff;
+  }
+  .result-control-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .result-filter-btn {
+    font: inherit; font-size: 12px; font-weight: 700; cursor: pointer;
+    padding: 7px 10px; border: 1.5px solid var(--line); border-radius: 999px;
+    color: var(--ink-soft); background: #fff;
+  }
+  .result-filter-btn.on { color: #fff; background: var(--kim); border-color: var(--kim); }
+  .result-filter-btn:disabled { opacity: .55; cursor: wait; }
+  .result-filter-note { grid-column: 1 / -1; font-size: 11.5px; color: var(--ink-soft); }
+  .hide-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .hide-btn {
+    font: inherit; font-size: 11.5px; font-weight: 700; cursor: pointer;
+    padding: 6px 9px; border: 1px solid var(--line); border-radius: 8px;
+    color: var(--ink-soft); background: #f8f6f1;
+  }
+  .hide-btn:hover { color: var(--broth-deep); border-color: #d8a89d; }
+  .report-reasons {
+    display: none; gap: 6px; flex-wrap: wrap; width: 100%; padding: 9px;
+    border: 1px dashed #d8a89d; border-radius: 9px; background: #fff8f6;
+  }
+  .report-reasons.show { display: flex; }
+  .report-reasons span { width: 100%; font-size: 11.5px; color: var(--ink-soft); }
+  .report-reasons button {
+    font: inherit; font-size: 11.5px; font-weight: 700; cursor: pointer;
+    padding: 5px 8px; border: 1px solid #e3c6bf; border-radius: 7px;
+    color: var(--broth-deep); background: #fff;
+  }
+  @media (max-width: 520px) {
+    .result-controls { grid-template-columns: 1fr; }
+    .result-filter-note { grid-column: 1; }
+  }
   .place-addr { font-size: 13.5px; color: var(--ink-soft); margin-top: 6px; }
   .place-phone { font-size: 13.5px; margin-top: 2px; }
   .place-phone a { color: var(--kim); text-decoration: none; font-weight: 600; }
@@ -817,6 +868,14 @@ let compareIds = new Set();     // 현재 검색에서 비교할 맛집(최대 3
 let favFolderFilter = "전체";   // 즐겨찾기 폴더 화면 필터
 let pendingMenuChoice = null;   // 추상 검색어를 구체 메뉴로 고르는 중인 상태
 let pendingMapPinId = null;     // 목록에서 지도로 이동할 때 자동으로 열 핀
+let resultSort = "recommended"; // recommended | distance | reviews | price
+let openNowOnly = false;        // 영업 중인 곳만 보기
+let priceFilter = "all";       // 해외 가격대 all | 1 | 2 | 3plus
+let openFilterLoading = false;  // 국내 영업 상태 일괄 확인 중
+let lastPreparedConversion = null; // 지도 중심 재검색에서 AI 변환을 재사용
+let lastOriginalQuery = "";
+
+const HIDDEN_KEY = "imm_hidden_places_v1";
 
 const $ = (id) => document.getElementById(id);
 
@@ -1035,6 +1094,88 @@ function renderHist() {
 }
 renderHist();
 
+/* ───────── v16 관심 없음·잘못된 결과 숨김 ───────── */
+function getHiddenPlaces() {
+  try { return JSON.parse(localStorage.getItem(HIDDEN_KEY)) || {}; } catch (_) { return {}; }
+}
+function setHiddenPlaces(items) {
+  try { localStorage.setItem(HIDDEN_KEY, JSON.stringify(items || {})); } catch (_) {}
+}
+function hiddenPlaceKey(p, mode = searchMode) { return `${mode}:${String(p?.id || "")}`; }
+function isPlaceHidden(p) { return !!getHiddenPlaces()[hiddenPlaceKey(p)]; }
+function hiddenCountInResults() { return lastResults.filter(isPlaceHidden).length; }
+function hidePlace(p, reason) {
+  const items = getHiddenPlaces();
+  items[hiddenPlaceKey(p)] = {
+    id: String(p.id), mode: searchMode,
+    name: p.place_name || p.name || "",
+    reason: String(reason || "관심 없음").slice(0, 30), hiddenAt: Date.now(),
+  };
+  setHiddenPlaces(items);
+  compareIds.delete(String(p.id));
+  els.locStatus.textContent = `“${p.place_name || p.name || "이 결과"}”을(를) 숨겼어요. 상단의 숨긴 곳 버튼에서 되돌릴 수 있어요.`;
+  els.locStatus.className = "loc-status";
+  renderResults();
+  renderCompareDock();
+}
+function restoreHiddenInCurrentResults() {
+  const count = hiddenCountInResults();
+  if (!count) return;
+  if (!window.confirm(`현재 검색에서 숨긴 ${count}곳을 다시 보여줄까요?`)) return;
+  const items = getHiddenPlaces();
+  lastResults.forEach((p) => { delete items[hiddenPlaceKey(p)]; });
+  setHiddenPlaces(items);
+  renderResults();
+}
+
+/* ───────── v16 정렬·필터 공통값 ───────── */
+const PRICE_BUCKET = {
+  PRICE_LEVEL_FREE: 0,
+  PRICE_LEVEL_INEXPENSIVE: 1,
+  PRICE_LEVEL_MODERATE: 2,
+  PRICE_LEVEL_EXPENSIVE: 3,
+  PRICE_LEVEL_VERY_EXPENSIVE: 4,
+};
+function resultReviewCount(p) {
+  const imm = p._imm || {};
+  const overseas = !!(p.mapUrl || p.rating != null && p.place_name === undefined);
+  if (overseas) return Number(imm.googleRatingCount ?? p.ratingCount ?? 0) || 0;
+  return Number(imm.realCount ?? imm.totalReviews ?? p.reviews?.length ?? 0) || 0;
+}
+function resultPriceBucket(p) { return PRICE_BUCKET[p.priceLevel] ?? null; }
+function resultDistance(p) {
+  const value = Number(p.distance);
+  return Number.isFinite(value) ? value : Number.MAX_SAFE_INTEGER;
+}
+function matchesPriceFilter(p) {
+  if (priceFilter === "all") return true;
+  const bucket = resultPriceBucket(p);
+  if (bucket == null) return false;
+  if (priceFilter === "3plus") return bucket >= 3;
+  return bucket === Number(priceFilter);
+}
+function sortVisibleResults(list) {
+  const sorted = list.slice();
+  if (resultSort === "distance") {
+    sorted.sort((a, b) => resultDistance(a) - resultDistance(b));
+  } else if (resultSort === "reviews") {
+    sorted.sort((a, b) => resultReviewCount(b) - resultReviewCount(a) || resultDistance(a) - resultDistance(b));
+  } else if (resultSort === "price") {
+    sorted.sort((a, b) => (resultPriceBucket(a) ?? 99) - (resultPriceBucket(b) ?? 99) || resultDistance(a) - resultDistance(b));
+  }
+  return sorted;
+}
+function getVisibleResults() {
+  const visible = lastResults.filter((p) => {
+    if (isPlaceHidden(p)) return false;
+    if (minStars !== 0 && !(typeof p._imm.stars === "number" && p._imm.stars >= minStars)) return false;
+    if (openNowOnly && p.openNow !== true) return false;
+    if (searchMode === "overseas" && !matchesPriceFilter(p)) return false;
+    return true;
+  });
+  return sortVisibleResults(visible);
+}
+
 /* ───────── 즐겨찾기 ───────── */
 const FKEY = "imm_favs";
 const FFOLDER_KEY = "imm_fav_folders";
@@ -1189,6 +1330,12 @@ function setSearchMode(mode) {
   currentTiers = null;
   minStars = 0;
   resultView = "list";
+  resultSort = "recommended";
+  openNowOnly = false;
+  priceFilter = "all";
+  openFilterLoading = false;
+  lastPreparedConversion = null;
+  lastOriginalQuery = "";
   hideMenuChoice();
   compareIds.clear();
   renderCompareDock();
@@ -1539,7 +1686,13 @@ async function runSearch(options = {}) {
   searching = true;
   const gen = ++searchGen; // 이 검색의 세대 번호. 이후 도착하는 옛 응답은 무시
   if (favMode) setFavMode(false); // 즐겨찾기 화면에서 검색하면 검색 화면으로 복귀
-  minStars = 0; resultView = "list"; pendingMapPinId = null; // 새 검색마다 필터·뷰 초기화
+  minStars = 0;
+  resultView = options.openMapAfter ? "map" : "list";
+  resultSort = "recommended";
+  openNowOnly = false;
+  priceFilter = "all";
+  openFilterLoading = false;
+  pendingMapPinId = null; // 새 검색마다 필터·뷰 초기화
   compareIds.clear();
   renderCompareDock();
   els.btn.disabled = true;
@@ -1572,6 +1725,8 @@ async function runSearch(options = {}) {
     }
 
     hideMenuChoice();
+    lastPreparedConversion = JSON.parse(JSON.stringify(preparedConversion || {}));
+    lastOriginalQuery = options.originalQuery || q;
     addHistory(q);
     if (searchMode === "overseas") {
       await runOverseasSearch(q, gen, preparedConversion, options.originalQuery || q);
@@ -2517,6 +2672,27 @@ function renderPlace(p, opts = {}) {
     else mapListBtn.addEventListener("click", () => showPlaceOnMap(p));
   }
 
+  // v16: 사용자에게 맞지 않거나 잘못된 결과는 다음 검색에서도 숨긴다.
+  const hideActions = document.createElement("div");
+  hideActions.className = "hide-actions";
+  hideActions.innerHTML =
+    '<button class="hide-btn not-interested-btn" type="button">🙈 관심 없음</button>' +
+    '<button class="hide-btn wrong-result-btn" type="button">⚠️ 잘못된 결과</button>' +
+    '<div class="report-reasons"><span>어떤 점이 잘못됐나요?</span></div>';
+  const reasonBox = hideActions.querySelector(".report-reasons");
+  ["메뉴 불일치", "음식점 아님", "폐업/이전", "중복 결과"].forEach((reason) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = reason;
+    button.addEventListener("click", () => hidePlace(p, reason));
+    reasonBox.appendChild(button);
+  });
+  hideActions.querySelector(".not-interested-btn").addEventListener("click", () => hidePlace(p, "관심 없음"));
+  hideActions.querySelector(".wrong-result-btn").addEventListener("click", () => {
+    reasonBox.classList.toggle("show");
+  });
+  card.querySelector(".links").after(hideActions);
+
   // 해외: 주문 도우미
   const orderBtn = card.querySelector(".order-btn");
   if (orderBtn) orderBtn.addEventListener("click", () => openOrderHelper(p));
@@ -2663,9 +2839,37 @@ function appendMapContext(beforeNode = null) {
   context.innerHTML = `<span class="map-context-dot ${info.fixed ? "fixed" : "gps"}"></span>` +
     `<span><strong>${info.kindLabel}</strong> · ${escapeHtml(info.label)}</span>` +
     '<span class="map-context-help">핀을 한 번 누르면 평점 · 같은 핀을 한 번 더 누르면 목록 이동</span>';
+  const searchButton = document.createElement("button");
+  searchButton.type = "button";
+  searchButton.className = "map-area-search";
+  searchButton.textContent = "🔎 이 지역 재검색";
+  context.appendChild(searchButton);
   if (beforeNode) els.results.insertBefore(context, beforeNode);
   else els.results.appendChild(context);
-  return info;
+  return { ...info, context, searchButton };
+}
+
+async function rerunSearchFromMapCenter(lat, lng, button) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || !els.query.value.trim()) return;
+  manualCenter = { lat, lng, label: "지도에서 선택한 지역" };
+  const manualRadio = document.querySelector('input[name="locmode"][value="manual"]');
+  if (manualRadio) manualRadio.checked = true;
+  els.locInputRow.classList.add("show");
+  els.locInput.value = "지도에서 선택한 지역";
+  els.locStatus.textContent = "지도 중심을 기준으로 다시 찾고 있어요.";
+  els.locStatus.className = "loc-status";
+  if (button) { button.disabled = true; button.textContent = "검색 중…"; }
+
+  const preparedConversion = lastPreparedConversion
+    ? JSON.parse(JSON.stringify(lastPreparedConversion))
+    : null;
+  if (preparedConversion) preparedConversion.region = "";
+  await runSearch({
+    preparedConversion,
+    originalQuery: lastOriginalQuery || els.query.value.trim(),
+    resolvedMenu: true,
+    openMapAfter: true,
+  });
 }
 
 function scrollResultMapIntoView() {
@@ -2699,7 +2903,7 @@ function focusPlaceFromMap(placeId) {
 }
 
 /* 국내 결과 지도 (카카오맵) */
-function renderResultMap(list) {
+function renderResultMap(list, highlightChampion = champion) {
   const withCoords = list.filter((p) => p.y && p.x);
   const mapDiv = document.createElement("div");
   mapDiv.id = "resultMap";
@@ -2737,7 +2941,7 @@ function renderResultMap(list) {
     bounds.extend(pos);
     const marker = new kakao.maps.Marker({ map, position: pos });
     const stars = p._imm && typeof p._imm.stars === "number" ? ` ★${p._imm.stars.toFixed(1)}` : "";
-    const isChamp = champion && champion.id === p.id ? "👑 " : "";
+    const isChamp = highlightChampion && highlightChampion.id === p.id ? "👑 " : "";
     const info = new kakao.maps.InfoWindow({
       content: `<div style="padding:7px 10px;font-size:12px;font-weight:700;white-space:nowrap;">${isChamp}${escapeHtml(p.place_name)}${stars}` +
         '<div style="margin-top:3px;font-size:10px;font-weight:500;color:#766d63;">같은 핀을 한 번 더 누르면 목록으로 이동</div></div>',
@@ -2757,6 +2961,10 @@ function renderResultMap(list) {
     if (String(p.id) === pendingMapPinId) selectedMarker = { marker, info, pos };
   });
   map.setBounds(bounds);
+  centerInfo.searchButton.addEventListener("click", () => {
+    const nextCenter = map.getCenter();
+    rerunSearchFromMapCenter(Number(nextCenter.getLat()), Number(nextCenter.getLng()), centerInfo.searchButton);
+  });
   if (selectedMarker) {
     map.panTo(selectedMarker.pos);
     selectedMarker.info.open(map, selectedMarker.marker);
@@ -2787,7 +2995,7 @@ function loadGoogleMaps() {
 }
 
 /* 해외 결과 지도 (구글맵): 기준점(파란 점)과 식당 핀을 함께 표시 */
-async function renderResultMapOverseas(list) {
+async function renderResultMapOverseas(list, highlightChampion = champion) {
   const withCoords = list.filter((p) => p.lat != null && p.lng != null);
   const mapDiv = document.createElement("div");
   mapDiv.id = "resultMap";
@@ -2856,7 +3064,7 @@ async function renderResultMapOverseas(list) {
     const marker = new g.Marker({ map, position: pos, title: p.name });
     const stars = p._imm && typeof p._imm.stars === "number" ? ` ★${p._imm.stars.toFixed(1)}` : "";
     const dist = p.distance != null ? ` · ${fmtDist(p.distance)}` : "";
-    const isChamp = champion && champion.id === p.id ? "👑 " : "";
+    const isChamp = highlightChampion && highlightChampion.id === p.id ? "👑 " : "";
     const info = new g.InfoWindow({
       content: `<div style="font-size:12px;font-weight:700;white-space:nowrap;color:#211d19;">${isChamp}${escapeHtml(p.name)}${stars}${dist}` +
         '<div style="margin-top:3px;font-size:10px;font-weight:500;color:#766d63;">같은 핀을 한 번 더 누르면 목록으로 이동</div></div>',
@@ -2876,6 +3084,11 @@ async function renderResultMapOverseas(list) {
     if (String(p.id) === pendingMapPinId) selectedMarker = { marker, info, pos };
   });
   map.fitBounds(bounds);
+  centerInfo.searchButton.addEventListener("click", () => {
+    const nextCenter = map.getCenter();
+    if (!nextCenter) return;
+    rerunSearchFromMapCenter(Number(nextCenter.lat()), Number(nextCenter.lng()), centerInfo.searchButton);
+  });
   if (selectedMarker) {
     map.panTo(selectedMarker.pos);
     selectedMarker.info.open({ map, anchor: selectedMarker.marker });
@@ -2889,8 +3102,11 @@ async function renderResultMapOverseas(list) {
   els.results.appendChild(meta);
 }
 
-/* 국내 영업시간 배지 (구글 조회, 하루 단위 캐시) */
-async function loadHoursBadge(p, target) {
+/* 국내 영업시간 배지·영업 중 필터 (구글 조회, 하루 단위 캐시) */
+async function getHoursInfo(p) {
+  if (p.openNow === true || p.openNow === false || p.closedToday === true) {
+    return { found: true, openNow: p.openNow, closedToday: p.closedToday, todayHours: p.todayHours || null };
+  }
   const today = new Intl.DateTimeFormat("en-CA", {
     year: "numeric", month: "2-digit", day: "2-digit",
   }).format(new Date());
@@ -2899,17 +3115,35 @@ async function loadHoursBadge(p, target) {
   try { const hit = localStorage.getItem(cacheKey); if (hit) info = JSON.parse(hit); } catch (_) {}
 
   if (!info) {
-    const loading = document.createElement("span");
-    loading.className = "hours-text"; loading.textContent = "확인 중…";
-    target.appendChild(loading);
     try {
       const q = (p.place_name || "") + " " + dongOf(p.address_name || "");
       const r = await apiFetch("/api/gplaces?mode=hours&query=" + encodeURIComponent(q));
       info = await r.json();
       try { localStorage.setItem(cacheKey, JSON.stringify(info)); } catch (_) {}
     } catch (_) { info = null; }
-    loading.remove();
   }
+
+  if (info && info.found) {
+    p.openNow = info.openNow;
+    p.closedToday = info.closedToday;
+    p.todayHours = info.todayHours || null;
+  }
+  return info;
+}
+
+async function hydrateDomesticOpenStatuses(list) {
+  const pending = list.filter((p) => p.openNow == null && p.closedToday == null);
+  for (let i = 0; i < pending.length; i += 4) {
+    await Promise.all(pending.slice(i, i + 4).map((p) => getHoursInfo(p)));
+  }
+}
+
+async function loadHoursBadge(p, target) {
+  const loading = document.createElement("span");
+  loading.className = "hours-text"; loading.textContent = "확인 중…";
+  target.appendChild(loading);
+  const info = await getHoursInfo(p);
+  loading.remove();
 
   if (!info || !info.found || (info.openNow == null && info.closedToday == null)) {
     const t = document.createElement("span");
@@ -3205,11 +3439,12 @@ const TIER_LABEL = {
 };
 function renderResults() {
   els.results.innerHTML = "";
-  const filtered = lastResults.filter((p) =>
-    minStars === 0 || (typeof p._imm.stars === "number" && p._imm.stars >= minStars));
+  const filtered = getVisibleResults();
+  const hiddenCount = hiddenCountInResults();
   const ratedCount = lastResults.filter((p) => typeof p._imm.stars === "number").length;
   const unavailableCount = lastResults.filter((p) => p._imm.verified === false).length;
-  els.resultMeta.textContent = `${lastResults.length}곳 중 별점 근거 충분 ${ratedCount}곳` +
+  els.resultMeta.textContent = `${lastResults.length}곳 중 현재 ${filtered.length}곳 · 별점 근거 충분 ${ratedCount}곳` +
+    (hiddenCount ? ` · 숨김 ${hiddenCount}곳` : "") +
     (unavailableCount ? ` · 검증 일시 중단 ${unavailableCount}곳` : "");
 
   // ── 목록/지도 전환: 결과 수 바로 아래에서 먼저 보이게 배치 ──
@@ -3236,6 +3471,79 @@ function renderResults() {
     els.results.appendChild(switchRow);
   }
 
+  // ── v16 영업·거리·후기·가격대 정렬/필터 ──
+  const controls = document.createElement("div");
+  controls.className = "result-controls";
+  const sortWrap = document.createElement("div");
+  sortWrap.className = "result-control";
+  sortWrap.innerHTML = '<label for="resultSort">정렬</label>';
+  const sortSelect = document.createElement("select");
+  sortSelect.id = "resultSort";
+  sortSelect.className = "result-sort";
+  const sortOptions = [
+    ["recommended", "추천순"],
+    ["distance", "가까운 순"],
+    ["reviews", "후기 많은 순"],
+  ];
+  if (searchMode === "overseas") sortOptions.push(["price", "가격 낮은 순"]);
+  sortOptions.forEach(([value, label]) => {
+    const option = document.createElement("option");
+    option.value = value; option.textContent = label; option.selected = resultSort === value;
+    sortSelect.appendChild(option);
+  });
+  sortSelect.addEventListener("change", () => { resultSort = sortSelect.value; renderResults(); });
+  sortWrap.appendChild(sortSelect);
+  controls.appendChild(sortWrap);
+
+  const filterWrap = document.createElement("div");
+  filterWrap.className = "result-control";
+  filterWrap.innerHTML = '<span class="result-control-title">빠른 필터</span>';
+  const quickChips = document.createElement("div");
+  quickChips.className = "result-control-chips";
+  const openButton = document.createElement("button");
+  openButton.type = "button";
+  openButton.className = "result-filter-btn" + (openNowOnly ? " on" : "");
+  openButton.setAttribute("aria-pressed", String(openNowOnly));
+  openButton.textContent = openFilterLoading ? "영업 확인 중…" : "🟢 영업 중만";
+  openButton.disabled = openFilterLoading;
+  openButton.addEventListener("click", async () => {
+    if (openNowOnly) { openNowOnly = false; renderResults(); return; }
+    openNowOnly = true;
+    if (searchMode === "domestic") {
+      const gen = searchGen;
+      openFilterLoading = true;
+      openButton.disabled = true;
+      openButton.textContent = "영업 확인 중…";
+      await hydrateDomesticOpenStatuses(lastResults.filter((p) => !isPlaceHidden(p)));
+      openFilterLoading = false;
+      if (gen !== searchGen) return;
+    }
+    renderResults();
+  });
+  quickChips.appendChild(openButton);
+
+  if (searchMode === "overseas") {
+    [["all", "가격 전체"], ["1", "₩"], ["2", "₩₩"], ["3plus", "₩₩₩+"]].forEach(([value, label]) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "result-filter-btn" + (priceFilter === value ? " on" : "");
+      button.setAttribute("aria-pressed", String(priceFilter === value));
+      button.textContent = label;
+      button.addEventListener("click", () => { priceFilter = value; renderResults(); });
+      quickChips.appendChild(button);
+    });
+  }
+  filterWrap.appendChild(quickChips);
+  controls.appendChild(filterWrap);
+
+  const controlNote = document.createElement("div");
+  controlNote.className = "result-filter-note";
+  controlNote.textContent = searchMode === "domestic"
+    ? "영업 중 필터는 누를 때만 구글 영업 정보를 확인하며 하루 동안 기기에 저장해요. 국내 가격대는 신뢰할 데이터가 없어 표시하지 않아요."
+    : "가격 정보가 없는 식당은 가격 필터를 선택하면 제외돼요.";
+  controls.appendChild(controlNote);
+  els.results.appendChild(controls);
+
   // ── 별점 필터와 후보 공유 ──
   const bar = document.createElement("div");
   bar.className = "filter-bar";
@@ -3254,31 +3562,63 @@ function renderResults() {
     shareCandidateList(selected.length ? selected : filtered.slice(0, 3), shareListBtn);
   });
   bar.appendChild(shareListBtn);
+  if (hiddenCount) {
+    const restoreButton = document.createElement("button");
+    restoreButton.className = "action-chip";
+    restoreButton.type = "button";
+    restoreButton.textContent = `🙈 숨긴 곳 ${hiddenCount}`;
+    restoreButton.addEventListener("click", restoreHiddenInCurrentResults);
+    bar.appendChild(restoreButton);
+  }
   els.results.appendChild(bar);
 
   // ── 1등 맛집 카드 ──
-  const championVisible = champion &&
-    (minStars === 0 || (typeof champion._imm.stars === "number" && champion._imm.stars >= minStars));
+  const shownChampion = champion && filtered.includes(champion) ? champion : pickChampion(filtered);
+  const championVisible = !!shownChampion;
   if (championVisible) {
     const crown = document.createElement("div");
     crown.className = "champ-banner";
-    const crownLabel = champion._tier === "exact"
+    const crownLabel = shownChampion._tier === "exact"
       ? "정확 메뉴 중 1등"
-      : champion._tier === "broad"
+      : shownChampion._tier === "broad"
         ? "비슷한 메뉴 중 추천"
         : "같은 계열 중 추천";
     crown.innerHTML = `<span class="champ-icon">👑</span> ${crownLabel}`;
     els.results.appendChild(crown);
-    const champCard = renderPlace(champion, { champion: true });
+    const champCard = renderPlace(shownChampion, { champion: true });
     champCard.classList.add("is-champion");
     els.results.appendChild(champCard);
-    loadChampionSummary(champion, champCard); // AI 한줄평 (비동기, 캐시)
+    if (shownChampion === champion) loadChampionSummary(shownChampion, champCard); // 기존 1등만 AI 한줄평 (비동기, 캐시)
   }
 
   // ── 지도 모드: 1등 카드 바로 아래에 표시 ──
   if (resultView === "map") {
-    if (searchMode === "domestic" && kakaoReady) { renderResultMap(filtered); return; }
-    if (searchMode === "overseas") { renderResultMapOverseas(filtered); return; }
+    if (searchMode === "domestic" && kakaoReady) { renderResultMap(filtered, shownChampion); return; }
+    if (searchMode === "overseas") { renderResultMapOverseas(filtered, shownChampion); return; }
+  }
+
+  // 추천순 외 정렬은 계층을 섞어 실제 거리·후기·가격 순서를 그대로 보여준다.
+  if (resultSort !== "recommended") {
+    const labelMap = { distance: "가까운 순", reviews: "후기 많은 순", price: "가격 낮은 순" };
+    const group = filtered.filter((p) => !championVisible || p.id !== shownChampion.id);
+    if (group.length) {
+      const head = document.createElement("div");
+      head.className = "tier-head";
+      head.innerHTML = `<span class="tier-name">${labelMap[resultSort]}</span>` +
+        '<span class="tier-kw">추천 1등은 위에 고정</span>' +
+        `<span class="tier-count">${group.length}곳</span>`;
+      els.results.appendChild(head);
+      group.forEach((p) => els.results.appendChild(renderPlace(p)));
+    }
+    if (!championVisible && !group.length) {
+      const meta = document.createElement("div");
+      meta.className = "result-meta";
+      meta.style.margin = "10px 0";
+      meta.textContent = "선택한 조건에 맞는 곳이 없어요. 필터를 줄여보세요.";
+      els.results.appendChild(meta);
+    }
+    renderCompareDock();
+    return;
   }
 
   // ── 계층별 그룹 (1등 카드는 위에 이미 표시했으므로 중복하지 않음) ──
@@ -3286,7 +3626,7 @@ function renderResults() {
   let shown = championVisible ? 1 : 0;
   order.forEach((tier) => {
     const group = filtered.filter((p) =>
-      (p._tier || "broad") === tier && (!championVisible || p.id !== champion.id));
+      (p._tier || "broad") === tier && (!championVisible || p.id !== shownChampion.id));
     if (!group.length) return;
     const label = currentTiers && currentTiers[tier];
     const head = document.createElement("div");
@@ -3305,7 +3645,7 @@ function renderResults() {
     const meta = document.createElement("div");
     meta.className = "result-meta";
     meta.style.margin = "10px 0";
-    meta.textContent = "이 별점 이상인 곳이 없어요. 기준을 낮춰보세요.";
+    meta.textContent = "선택한 조건에 맞는 곳이 없어요. 필터를 줄이거나 숨긴 곳을 복원해보세요.";
     els.results.appendChild(meta);
   }
   renderCompareDock();

@@ -1,7 +1,16 @@
-# MAINTENANCE.md — 임슐랭 가이드 v15 인수인계 문서
+# MAINTENANCE.md — 임슐랭 가이드 v16 인수인계 문서
 
 > 이 문서 하나를 붙여넣으면 어떤 AI 모델/개발자와 대화하든 프로젝트 전체 맥락이 전달되도록 작성됨.
-> 최종 갱신: 2026-08 (v15 기준)
+> 최종 갱신: 2026-08 (v16 기준)
+
+## v16 핵심 변경
+
+- `resultSort`, `openNowOnly`, `priceFilter` 상태와 `getVisibleResults`가 정렬·필터를 한곳에서 처리한다.
+- 해외 가격대는 Places 응답의 `priceLevel`만 사용한다. 국내는 가격 데이터가 없어 가격 필터를 제공하지 않는다.
+- 국내 `영업 중만`은 `hydrateDomesticOpenStatuses`가 사용자의 클릭 때만 최대 4개씩 조회하고 `hours:<placeId>:<date>` 캐시를 재사용한다. 전 카드 자동조회로 바꾸지 않는다.
+- 숨김 데이터는 `imm_hidden_places_v1`에 `모드:장소ID` 키로 저장한다. 즐겨찾기 데이터는 삭제하지 않으며 현재 검색의 숨긴 곳을 복원할 수 있다.
+- `rerunSearchFromMapCenter`는 지도 중심을 `manualCenter`로 저장하고 `lastPreparedConversion`을 재사용한다. 지역 문자열은 비워 새 지도 좌표와 충돌하지 않게 한다.
+- 회귀 검사는 `tests/v16-result-controls.test.mjs`에 있다.
 
 ## v15 핵심 변경
 
