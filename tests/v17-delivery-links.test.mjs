@@ -17,6 +17,7 @@ function deliveryContext() {
     "globalThis.setQuery = (value) => { lastOriginalQuery = value; };" +
     "globalThis.setLocation = (value) => { els.locInput.value = value; };" +
     "globalThis.hasIntent = hasDeliveryIntent;" +
+    "globalThis.evidence = deliveryEvidenceFor;" +
     "globalThis.platforms = deliveryPlatformsFor;" +
     "globalThis.searchText = deliverySearchText;",
     context,
@@ -52,4 +53,36 @@ test("배달앱 검색어는 지점 구분을 위해 음식점명과 주소를 �
   assert.match(html, /window\.open\(platform\.url, "_blank", "noopener,noreferrer"\)/);
   assert.match(html, /copyDeliverySearchText\(searchText\)/);
   assert.match(html, /현재 주소의 배달 가능 여부는 앱에서 최종 확인/);
+});
+
+test("일반 검색도 후기의 확실한 배달 근거가 있으면 음식점별로 배달앱을 노출한다", () => {
+  const context = deliveryContext();
+  context.setQuery("맛있는 떡볶이");
+  const platformMention = {
+    _imm: { verified: true, realReviews: [{ title: "저녁 메뉴", description: "배민으로 주문해서 맛있게 먹었어요", link: "a" }] },
+  };
+  assert.equal(context.evidence(platformMention, false).source, "reviews");
+
+  const repeatedGeneric = {
+    _imm: { verified: true, realReviews: [
+      { title: "후기 1", description: "배달 포장 상태가 괜찮았어요", link: "a" },
+      { title: "후기 2", description: "배달 메뉴도 먹어봤어요", link: "b" },
+    ] },
+  };
+  assert.equal(context.evidence(repeatedGeneric, false).mentionCount, 2);
+});
+
+test("배달 불가 후기와 단순 1회 언급은 배달 가능 근거로 오인하지 않는다", () => {
+  const context = deliveryContext();
+  context.setQuery("맛있는 피자");
+  const negative = {
+    _imm: { verified: true, realReviews: [{ title: "방문 후기", description: "현재 배달은 안 되고 매장 식사만 가능해요", link: "a" }] },
+  };
+  assert.equal(context.evidence(negative, false), null);
+
+  const weak = {
+    _imm: { verified: true, realReviews: [{ title: "방문 후기", description: "근처 배달 차량이 많았어요", link: "a" }] },
+  };
+  assert.equal(context.evidence(weak, false), null);
+  assert.match(html, /후기에서 배달 언급/);
 });
