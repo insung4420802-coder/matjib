@@ -31,7 +31,7 @@ test("목록 카드에서 해당 지도 핀으로 돌아갈 수 있다", () => {
 });
 
 test("지도 연결은 기존 카카오·구글 지도 렌더 안에서 동작한다", () => {
-  assert.match(html, /function renderResultMap\(list\)/);
-  assert.match(html, /async function renderResultMapOverseas\(list\)/);
+  assert.match(html, /function renderResultMap\(list(?:, highlightChampion = champion)?\)/);
+  assert.match(html, /async function renderResultMapOverseas\(list(?:, highlightChampion = champion)?\)/);
   assert.doesNotMatch(html, /function focusPlaceFromMap[\s\S]{0,500}apiFetch\(/);
 });
