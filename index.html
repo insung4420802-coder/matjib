@@ -2452,10 +2452,60 @@ function normText(s) {
 
 /* ───────── v17 배달 의도·지역별 배달앱 연결 ───────── */
 const DELIVERY_INTENT_RE = /(?:배달|딜리버리|delivery|deliver(?:ed|ing)?|배민|쿠팡\s*이츠|우버\s*이츠|uber\s*eats|그랩\s*푸드|grab\s*food|시켜\s*먹)/i;
+const DELIVERY_REVIEW_RE = /(?:배달|딜리버리|delivery|deliver(?:ed|ing)?|배민|배달의\s*민족|쿠팡\s*이츠|요기요|우버\s*이츠|uber\s*eats|그랩\s*푸드|grab\s*food|door\s*dash|deliveroo|foodpanda)/i;
+const DELIVERY_PLATFORM_RE = /(?:배민|배달의\s*민족|쿠팡\s*이츠|요기요|우버\s*이츠|uber\s*eats|그랩\s*푸드|grab\s*food|door\s*dash|deliveroo|foodpanda)/i;
+const DELIVERY_POSITIVE_RE = /(?:배달(?:로|을|이|도|은|주문|시켜|시켰|받아|왔|와서|빠르)|delivery\s+(?:order|service|available|arrived|was|is)|ordered?\s+(?:for\s+)?delivery|delivered\s+to)/i;
+const DELIVERY_NEGATIVE_RE = /(?:(?:배달|딜리버리|delivery).{0,16}(?:안\s*(?:됨|돼|되)|불가|중단|종료|없(?:음|다)|하지\s*않|지원하지\s*않|unavailable|not\s+available|no\s+longer|doesn'?t|do\s+not|no\s+delivery)|(?:안\s*(?:됨|돼|되)|불가|중단|종료|없(?:음|다)|unavailable|not\s+available|no\s+delivery).{0,16}(?:배달|딜리버리|delivery))/i;
 const SOUTHEAST_ASIA_RE = /(?:태국|thailand|베트남|vietnam|싱가포르|singapore|말레이시아|malaysia|인도네시아|indonesia|필리핀|philippines|캄보디아|cambodia|미얀마|myanmar)/i;
 
 function hasDeliveryIntent() {
   return DELIVERY_INTENT_RE.test(String(lastOriginalQuery || els.query.value || ""));
+}
+
+function deliveryReviewItems(p, overseas) {
+  const items = [];
+  const verifiedBlogs = p._imm?.verified === false ? [] : (p._imm?.realReviews || []);
+  verifiedBlogs.forEach((review) => items.push({
+    title: String(review.title || ""),
+    text: [review.title, review.description].filter(Boolean).join(" "),
+    key: review.link || `${review.title || ""}:${review.description || ""}`,
+  }));
+  if (overseas) {
+    (p.reviews || []).forEach((review) => items.push({
+      title: "",
+      text: [review.textKo, review.text].filter(Boolean).join(" "),
+      key: `${review.author || ""}:${review.text || review.textKo || ""}`,
+    }));
+  }
+  const seen = new Set();
+  return items.filter((item) => {
+    const key = String(item.key || item.text).replace(/\s+/g, " ").trim();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function deliveryEvidenceFor(p, overseas) {
+  if (hasDeliveryIntent()) return { source: "query", mentionCount: 0 };
+
+  let mentionCount = 0;
+  let strongCount = 0;
+  deliveryReviewItems(p, overseas).forEach((review) => {
+    const title = review.title.replace(/<[^>]+>/g, " ");
+    const text = review.text.replace(/<[^>]+>/g, " ");
+    if (!DELIVERY_REVIEW_RE.test(text) || DELIVERY_NEGATIVE_RE.test(text)) return;
+    mentionCount += 1;
+    if (DELIVERY_PLATFORM_RE.test(text) || DELIVERY_POSITIVE_RE.test(text) || DELIVERY_REVIEW_RE.test(title)) {
+      strongCount += 1;
+    }
+  });
+
+  // 플랫폼명·실제 주문 표현·후기 제목은 1건, 단순 단어 언급은 서로 다른 후기 2건부터 노출한다.
+  if (strongCount >= 1 || mentionCount >= 2) {
+    return { source: "reviews", mentionCount };
+  }
+  return null;
 }
 
 function deliveryLocationText(p) {
@@ -2528,15 +2578,21 @@ async function copyDeliverySearchText(text) {
 }
 
 function renderDeliveryLinks(card, p, overseas) {
-  if (!hasDeliveryIntent()) return;
+  const evidence = deliveryEvidenceFor(p, overseas);
+  if (!evidence) return;
   const platforms = deliveryPlatformsFor(p, overseas);
   if (!platforms.length) return;
 
   const box = document.createElement("div");
   box.className = "delivery-links";
+  box.dataset.deliverySource = evidence.source;
+  const title = evidence.source === "reviews" ? "🛵 후기에서 배달 언급" : "🛵 배달앱에서 확인";
+  const note = evidence.source === "reviews"
+    ? `후기 ${evidence.mentionCount}개에서 배달 관련 표현을 찾았어요. 현재 가능 여부는 앱에서 확인해 주세요.`
+    : "현재 주소의 배달 가능 여부는 앱에서 최종 확인해 주세요.";
   box.innerHTML =
-    '<div class="delivery-links-head"><span class="delivery-links-title">🛵 배달앱에서 확인</span>' +
-    '<span class="delivery-links-note">현재 주소의 배달 가능 여부는 앱에서 최종 확인해 주세요.</span></div>' +
+    `<div class="delivery-links-head"><span class="delivery-links-title">${title}</span>` +
+    `<span class="delivery-links-note">${note}</span></div>` +
     '<div class="delivery-links-buttons"></div><div class="delivery-status" aria-live="polite"></div>';
   const buttonRow = box.querySelector(".delivery-links-buttons");
   const status = box.querySelector(".delivery-status");
