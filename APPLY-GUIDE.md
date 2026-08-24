@@ -1,8 +1,8 @@
-# 임슐랭 가이드 v16 적용 안내
+# 임슐랭 가이드 v17 적용 안내
 
 ## 1. 적용 전에 확인할 값
 
-이 수정본은 운영 중인 v15 `main`의 아래 두 브라우저 키를 그대로 보존했다.
+이 수정본은 운영 중인 v16의 아래 두 브라우저 키를 그대로 보존했다.
 
 - `KAKAO_JS_KEY`
 - `GOOGLE_MAPS_JS_KEY`
@@ -11,11 +11,11 @@
 
 ## 2. 가장 쉬운 GitHub 적용 방법
 
-1. GitHub 저장소의 v15 `main`을 원본으로 `v16-result-controls` 브랜치를 만든다.
-2. 반드시 `v16-result-controls`가 선택된 상태에서 **Add file → Upload files**를 누른다.
-3. 이 v16 폴더 안의 파일과 폴더를 저장소 최상단에 업로드한다.
+1. GitHub 저장소의 v16 `v16-result-controls`를 원본으로 `v17-delivery-links` 브랜치를 만든다.
+2. 반드시 `v17-delivery-links`가 선택된 상태에서 **Add file → Upload files**를 누른다.
+3. 이 v17 폴더 안의 파일과 폴더를 저장소 최상단에 업로드한다.
 4. 같은 이름의 파일을 교체하고 새 파일을 추가한다.
-5. 커밋 메시지를 `임슐랭 v16 결과 제어와 지도 재검색`으로 적고 커밋한다.
+5. 커밋 메시지를 `임슐랭 v17 배달앱 연결`로 적고 커밋한다.
 6. Pull Request를 만들고 Vercel Preview 주소에서 먼저 테스트한다.
 7. 테스트가 끝난 뒤 Pull Request를 `main`에 Merge한다.
 
@@ -60,6 +60,14 @@ Google Cloud Console에서 다음을 설정한다.
 지인 공유 규모라면 무료 사용량 안에 머물 가능성이 높지만, `currentOpeningHours`와 `reviews` 같은 필드는 높은 Places 요금 등급을 사용할 수 있으므로 알림과 쿼터를 함께 설정하는 것이 안전하다.
 
 ## 5. 배포 후 확인 항목
+
+### v17 기능
+
+1. 국내에서 `배달 떡볶이`를 검색하면 각 결과에 배민·쿠팡이츠 버튼이 표시되는지 확인한다.
+2. 일반 검색 `떡볶이`에는 배달앱 영역이 표시되지 않는지 확인한다.
+3. 해외에서 `delivery sushi`를 검색하면 Uber Eats 버튼이 표시되는지 확인한다.
+4. 방콕·싱가포르·베트남 등 동남아에서 배달 검색을 하면 Uber Eats 대신 GrabFood가 표시되는지 확인한다.
+5. 버튼을 누르면 공식 사이트가 새로 열리고 음식점명과 주소가 복사되었다는 안내가 나오는지 확인한다.
 
 ### v16 기능
 
@@ -113,7 +121,7 @@ Google Cloud Console에서 다음을 설정한다.
 
 ## 6. 문제 발생 시 되돌리기
 
-GitHub의 v16 Pull Request에서 **Revert**를 누르면 v16만 되돌리고 현재 운영 v15를 유지할 수 있다. `v16-result-controls`, `v15-map-layout`, `v14-map-list-link`, `v13-review-menu-picker`, `v12-family-tools` 브랜치는 삭제하지 않는다.
+GitHub의 v17 Pull Request에서 **Revert**를 누르면 배달앱 기능만 되돌리고 운영 v16을 유지할 수 있다. `v17-delivery-links`, `v16-result-controls`, `v15-map-layout`, `v14-map-list-link`, `v13-review-menu-picker`, `v12-family-tools` 브랜치는 삭제하지 않는다.
 
 ## 7. 비용 변화
 
@@ -128,3 +136,4 @@ GitHub의 v16 Pull Request에서 **Revert**를 누르면 v16만 되돌리고 현
 - 정렬·가격 필터·숨김: 기존 결과와 기기 저장소만 사용하므로 API·AI 호출 추가 없음
 - 국내 `영업 중만`: 사용자가 누를 때만 Google Places 영업시간을 장소별 조회하고 하루 동안 캐시
 - `이 지역 재검색`: 새 위치의 장소·후기는 다시 조회하지만 기존 메뉴 변환을 재사용하므로 Claude 키워드 호출 추가 없음
+- 배달앱 연결: 기존 결과와 검색어만 사용하므로 API·AI 호출 추가 없음
