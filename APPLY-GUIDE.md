@@ -1,4 +1,4 @@
-# 임슐랭 가이드 v17 적용 안내
+# 임슐랭 가이드 v19 적용 안내
 
 ## 1. 적용 전에 확인할 값
 
@@ -11,20 +11,19 @@
 
 ## 2. 가장 쉬운 GitHub 적용 방법
 
-1. GitHub 저장소의 v16 `v16-result-controls`를 원본으로 `v17-delivery-links` 브랜치를 만든다.
-2. 반드시 `v17-delivery-links`가 선택된 상태에서 **Add file → Upload files**를 누른다.
-3. 이 v17 폴더 안의 파일과 폴더를 저장소 최상단에 업로드한다.
+1. GitHub 저장소의 운영 `main`을 원본으로 `v19-franchise-filter` 브랜치를 만든다.
+2. 반드시 `v19-franchise-filter`가 선택된 상태에서 **Add file → Upload files**를 누른다.
+3. 이 v19 폴더 안의 파일과 폴더를 저장소 최상단에 업로드한다.
 4. 같은 이름의 파일을 교체하고 새 파일을 추가한다.
-5. 커밋 메시지를 `임슐랭 v17 배달앱 연결`로 적고 커밋한다.
+5. 커밋 메시지를 `임슐랭 v19 프랜차이즈 필터`로 적고 커밋한다.
 6. Pull Request를 만들고 Vercel Preview 주소에서 먼저 테스트한다.
 7. 테스트가 끝난 뒤 Pull Request를 `main`에 Merge한다.
 
-새로 추가되는 파일:
+v19에서 새로 추가되는 파일:
 
-- `api/lib/guard.js`
-- `package.json`
-- `tests/score.test.mjs`
-- `APPLY-GUIDE.md`
+- `franchise-data.js`
+- `franchise.js`
+- `tests/v19-franchise-filter.test.mjs`
 
 ## 3. Vercel 환경변수
 
@@ -60,6 +59,16 @@ Google Cloud Console에서 다음을 설정한다.
 지인 공유 규모라면 무료 사용량 안에 머물 가능성이 높지만, `currentOpeningHours`와 `reviews` 같은 필드는 높은 Places 요금 등급을 사용할 수 있으므로 알림과 쿼터를 함께 설정하는 것이 안전하다.
 
 ## 5. 배포 후 확인 항목
+
+### v19 프랜차이즈·로컬 식당 판정
+
+1. 국내에서 스타벅스·홍콩반점 같은 결과에 `프랜차이즈` 배지가 표시되는지 확인한다.
+2. 성심당처럼 등록된 지역 브랜드에 `지역 체인` 배지가 표시되는지 확인한다.
+3. 알려지지 않은 개인 식당은 `로컬 식당 추정 · 주요 브랜드·체인 단서 없음`으로 표시되는지 확인한다.
+4. `프랜차이즈 제외`를 켰을 때 프랜차이즈·지역 체인만 사라지고 로컬 식당 추정은 남는지 확인한다.
+5. 카드의 `판정 수정`에서 개인 식당·프랜차이즈 등으로 바꾼 뒤 새로고침해도 판정이 유지되는지 확인한다.
+6. `자동 판정으로 복원`을 누르면 기본 사전·규칙 판정으로 돌아오는지 확인한다.
+7. 국내와 해외 주요 브랜드 모두 판정되며 검색 중 추가 API 요청이 발생하지 않는지 확인한다.
 
 ### v18 배달 기능
 
@@ -121,7 +130,7 @@ Google Cloud Console에서 다음을 설정한다.
 
 ## 6. 문제 발생 시 되돌리기
 
-GitHub의 v17 Pull Request에서 **Revert**를 누르면 배달앱 기능만 되돌리고 운영 v16을 유지할 수 있다. `v17-delivery-links`, `v16-result-controls`, `v15-map-layout`, `v14-map-list-link`, `v13-review-menu-picker`, `v12-family-tools` 브랜치는 삭제하지 않는다.
+GitHub의 v19 Pull Request에서 **Revert**를 누르면 프랜차이즈 기능만 되돌리고 운영 v18을 유지할 수 있다. `v19-franchise-filter`, `v18-domestic-delivery-cleanup`, `v17-delivery-links`, `v16-result-controls`, `v15-map-layout`, `v14-map-list-link`, `v13-review-menu-picker`, `v12-family-tools` 브랜치는 삭제하지 않는다.
 
 ## 7. 비용 변화
 
@@ -137,3 +146,4 @@ GitHub의 v17 Pull Request에서 **Revert**를 누르면 배달앱 기능만 되
 - 국내 `영업 중만`: 사용자가 누를 때만 Google Places 영업시간을 장소별 조회하고 하루 동안 캐시
 - `이 지역 재검색`: 새 위치의 장소·후기는 다시 조회하지만 기존 메뉴 변환을 재사용하므로 Claude 키워드 호출 추가 없음
 - 배달앱 연결: 기존 결과와 검색어만 사용하므로 API·AI 호출 추가 없음
+- 프랜차이즈 판정: 정적 브랜드 사전·기존 장소명·이미 받은 후기·기기 저장소만 사용하므로 API·AI 호출 추가 없음
