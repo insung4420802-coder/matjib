@@ -38,7 +38,9 @@
     if (!remaining) return true;
     // 아주 짧거나 일반적인 단어가 우연히 상호 앞부분과 겹치는 오판을 막는다.
     if (alias.normalized.length < 3) return false;
-    return /(?:점|지점|직영점|가맹점|branch|store)$/.test(remaining) || alias.normalized.length >= 5;
+    // 스타벅스 리저브 로스터리처럼 지점 접미사가 없는 확장 매장명도 잡는다.
+    // 두세 글자 일반어는 계속 접미사를 요구해 동명 개인 식당 오판을 줄인다.
+    return /(?:점|지점|직영점|가맹점|branch|store)$/.test(remaining) || alias.normalized.length >= 4;
   }
 
   function findCatalogMatch(name, entries) {
