@@ -1,7 +1,16 @@
-# MAINTENANCE.md — 임슐랭 가이드 v18 인수인계 문서
+# MAINTENANCE.md — 임슐랭 가이드 v19 인수인계 문서
 
 > 이 문서 하나를 붙여넣으면 어떤 AI 모델/개발자와 대화하든 프로젝트 전체 맥락이 전달되도록 작성됨.
-> 최종 갱신: 2026-08 (v18 기준)
+> 최종 갱신: 2026-08 (v19 기준)
+
+## v19 핵심 변경
+
+- 결과 카드에 `프랜차이즈`, `지역 체인`, `로컬 식당 추정` 배지와 판정 근거를 표시한다. `로컬 식당 추정`은 확정이 아니라 주요 브랜드·체인 단서가 없다는 뜻이다.
+- `프랜차이즈 제외`는 확정 프랜차이즈와 체인 판정만 숨긴다. 근거가 애매한 결과는 누락시키지 않는다.
+- `franchise-data.js`는 국내외 주요 프랜차이즈와 일부 지역 체인 사전이다. GitHub 웹에서 이 파일의 항목만 추가·수정해 유지보수할 수 있다.
+- `franchise.js`는 상호 정규화, 브랜드 별칭 대조, 후기의 체인 표현, 현재 결과의 동일 상호 반복을 조합한다. 외부 API와 Claude를 호출하지 않는다.
+- 카드의 `판정 수정`은 `imm_franchise_overrides_v1`에 `모드:장소ID`별로 저장한다. 기기에서 자동 판정보다 우선하며 `자동 판정으로 복원`할 수 있다.
+- 회귀 검사는 `tests/v19-franchise-filter.test.mjs`에 있다. 공정위 실시간 연동은 하지 않으므로 공식 브랜드 자료 갱신은 사전을 검토한 뒤 반영한다.
 
 ## v18 핵심 변경
 
@@ -97,6 +106,8 @@
 
 ```
 ├── index.html              # 앱 전체 (UI + 클라이언트 로직 + 카카오/구글맵 렌더)
+├── franchise-data.js       # v19 국내외 주요 프랜차이즈·지역 체인 기본 사전
+├── franchise.js            # v19 규칙 기반 브랜드 판정 엔진
 ├── README.md               # 설치/키 발급 가이드
 ├── MAINTENANCE.md          # 이 문서
 └── api/                    # Vercel 서버리스 함수
@@ -120,6 +131,7 @@
 - `classifyTier`: exact/broad/broader 계층 분류
 - `pickChampion` / `championScore`: 1등 선정 (별점만으로 안 뽑음)
 - `renderResults` / `renderPlace`: 결과·카드 렌더 (국내/해외 필드 정규화 포함)
+- `refreshFranchiseClassifications` / `renderFranchiseRow`: 프랜차이즈 판정·필터·사용자 수정
 - `renderResultMap`(카카오) / `renderResultMapOverseas`(구글): 지도 보기
 - `showLocSuggestions`: 위치칸 인라인 후보 (국내=카카오, 해외=구글 자동완성)
 - `loadHoursBadge`: 국내 영업시간 (구글 조회, 온디맨드)

@@ -647,6 +647,33 @@
   .result-filter-btn.on { color: #fff; background: var(--kim); border-color: var(--kim); }
   .result-filter-btn:disabled { opacity: .55; cursor: wait; }
   .result-filter-note { grid-column: 1 / -1; font-size: 11.5px; color: var(--ink-soft); }
+  .franchise-row {
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 7px;
+  }
+  .franchise-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11.5px; font-weight: 800; border-radius: 999px; padding: 4px 8px;
+  }
+  .franchise-badge.franchise { color: #8a3b2d; background: #fbeae5; }
+  .franchise-badge.chain { color: #76520f; background: #fdf3d8; }
+  .franchise-badge.independent { color: #1a6c3a; background: #e6f4ea; }
+  .franchise-badge.unknown { color: #625a50; background: #eeebe5; }
+  .franchise-badge.user::after { content: "내 수정"; font-size: 9px; opacity: .7; }
+  .franchise-reason { font-size: 11px; color: var(--ink-soft); }
+  .franchise-edit {
+    font: inherit; font-size: 10.5px; font-weight: 700; cursor: pointer;
+    border: 0; border-bottom: 1px dashed #aaa197; color: var(--ink-soft); background: none; padding: 2px;
+  }
+  .franchise-options {
+    display: none; width: 100%; gap: 5px; flex-wrap: wrap; padding: 8px;
+    border: 1px dashed #cec5b9; border-radius: 8px; background: #faf8f3;
+  }
+  .franchise-options.show { display: flex; }
+  .franchise-options span { width: 100%; font-size: 10.5px; color: var(--ink-soft); }
+  .franchise-options button {
+    font: inherit; font-size: 10.5px; font-weight: 700; cursor: pointer;
+    padding: 5px 7px; border: 1px solid var(--line); border-radius: 7px; color: var(--ink); background: #fff;
+  }
   .hide-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
   .hide-btn {
     font: inherit; font-size: 11.5px; font-weight: 700; cursor: pointer;
@@ -862,6 +889,8 @@
   <footer>made by jhab · 후기 출처: 네이버 블로그 · 장소 정보: 카카오/구글</footer>
 </div>
 
+<script src="/franchise-data.js"></script>
+<script src="/franchise.js"></script>
 <script>
 "use strict";
 
@@ -889,10 +918,12 @@ let resultSort = "recommended"; // recommended | distance | reviews | price
 let openNowOnly = false;        // 영업 중인 곳만 보기
 let priceFilter = "all";       // 해외 가격대 all | 1 | 2 | 3plus
 let openFilterLoading = false;  // 국내 영업 상태 일괄 확인 중
+let excludeFranchises = false;  // 프랜차이즈·체인 판정 결과 제외
 let lastPreparedConversion = null; // 지도 중심 재검색에서 AI 변환을 재사용
 let lastOriginalQuery = "";
 
 const HIDDEN_KEY = "imm_hidden_places_v1";
+const FRANCHISE_OVERRIDE_KEY = "imm_franchise_overrides_v1";
 
 const $ = (id) => document.getElementById(id);
 
@@ -1145,6 +1176,114 @@ function restoreHiddenInCurrentResults() {
   renderResults();
 }
 
+/* ───────── v19 프랜차이즈·로컬 식당 판정 ───────── */
+function getFranchiseOverrides() {
+  try { return JSON.parse(localStorage.getItem(FRANCHISE_OVERRIDE_KEY)) || {}; } catch (_) { return {}; }
+}
+function setFranchiseOverrides(items) {
+  try { localStorage.setItem(FRANCHISE_OVERRIDE_KEY, JSON.stringify(items || {})); } catch (_) {}
+}
+function franchiseModeForPlace(p) {
+  return p?.mapUrl || (p?.rating != null && p?.place_name === undefined) ? "overseas" : "domestic";
+}
+function refreshFranchiseClassifications() {
+  if (!window.IMMFranchise) return;
+  const observedCounts = IMMFranchise.buildObservedChainCounts(lastResults);
+  const overrides = getFranchiseOverrides();
+  lastResults.forEach((p) => {
+    p._franchise = IMMFranchise.classifyPlace(p, {
+      mode: searchMode,
+      catalog: window.IMM_FRANCHISE_CATALOG,
+      overrides,
+      observedCounts,
+    });
+  });
+}
+function setFranchiseOverride(p, kind) {
+  if (!window.IMMFranchise) return;
+  const items = getFranchiseOverrides();
+  const mode = franchiseModeForPlace(p);
+  const key = IMMFranchise.placeKey(p, mode);
+  if (!kind) delete items[key];
+  else {
+    items[key] = {
+      kind,
+      name: p.place_name || p.name || "",
+      mode,
+      savedAt: Date.now(),
+    };
+  }
+  setFranchiseOverrides(items);
+  if (favMode) renderFavView();
+  else renderResults();
+}
+function franchiseClassificationFor(p) {
+  if (p._franchise) return p._franchise;
+  if (!window.IMMFranchise) return null;
+  return IMMFranchise.classifyPlace(p, {
+    mode: franchiseModeForPlace(p),
+    catalog: window.IMM_FRANCHISE_CATALOG,
+    overrides: getFranchiseOverrides(),
+    observedCounts: IMMFranchise.buildObservedChainCounts(lastResults),
+  });
+}
+function renderFranchiseRow(card, p, opts = {}) {
+  const result = franchiseClassificationFor(p);
+  if (!result) return;
+  p._franchise = result;
+  const row = document.createElement("div");
+  row.className = "franchise-row";
+  row.dataset.franchiseKind = result.kind;
+  row.dataset.franchiseConfidence = result.confidence;
+
+  const badge = document.createElement("span");
+  badge.className = `franchise-badge ${result.kind}${result.userOverride ? " user" : ""}`;
+  badge.textContent = result.kind === "independent" ? `🏠 ${result.label}` : result.kind === "franchise" ? `🏢 ${result.label}` : `🔗 ${result.label}`;
+  badge.title = result.reason;
+  row.appendChild(badge);
+
+  const reason = document.createElement("span");
+  reason.className = "franchise-reason";
+  reason.textContent = `· ${result.reason}`;
+  row.appendChild(reason);
+
+  if (!opts.compact) {
+    const edit = document.createElement("button");
+    edit.type = "button";
+    edit.className = "franchise-edit";
+    edit.textContent = "판정 수정";
+    edit.setAttribute("aria-expanded", "false");
+    row.appendChild(edit);
+
+    const choices = document.createElement("div");
+    choices.className = "franchise-options";
+    choices.innerHTML = "<span>이 기기에서 다음 검색부터 적용됩니다.</span>";
+    [["franchise", "프랜차이즈"], ["chain", "지역 체인"], ["independent", "개인 식당"], ["unknown", "확인 필요"]].forEach(([kind, label]) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.franchiseOverride = kind;
+      button.textContent = label;
+      button.addEventListener("click", () => setFranchiseOverride(p, kind));
+      choices.appendChild(button);
+    });
+    if (result.userOverride) {
+      const reset = document.createElement("button");
+      reset.type = "button";
+      reset.dataset.franchiseOverride = "reset";
+      reset.textContent = "자동 판정으로 복원";
+      reset.addEventListener("click", () => setFranchiseOverride(p, ""));
+      choices.appendChild(reset);
+    }
+    edit.addEventListener("click", () => {
+      const open = choices.classList.toggle("show");
+      edit.setAttribute("aria-expanded", String(open));
+    });
+    row.appendChild(choices);
+  }
+
+  card.querySelector(".place-cat")?.after(row);
+}
+
 /* ───────── v16 정렬·필터 공통값 ───────── */
 const PRICE_BUCKET = {
   PRICE_LEVEL_FREE: 0,
@@ -1185,6 +1324,7 @@ function sortVisibleResults(list) {
 function getVisibleResults() {
   const visible = lastResults.filter((p) => {
     if (isPlaceHidden(p)) return false;
+    if (excludeFranchises && (p._franchise?.kind === "franchise" || p._franchise?.kind === "chain")) return false;
     if (minStars !== 0 && !(typeof p._imm.stars === "number" && p._imm.stars >= minStars)) return false;
     if (openNowOnly && p.openNow !== true) return false;
     if (searchMode === "overseas" && !matchesPriceFilter(p)) return false;
@@ -1351,6 +1491,7 @@ function setSearchMode(mode) {
   openNowOnly = false;
   priceFilter = "all";
   openFilterLoading = false;
+  excludeFranchises = false;
   lastPreparedConversion = null;
   lastOriginalQuery = "";
   hideMenuChoice();
@@ -1709,6 +1850,7 @@ async function runSearch(options = {}) {
   openNowOnly = false;
   priceFilter = "all";
   openFilterLoading = false;
+  excludeFranchises = false;
   pendingMapPinId = null; // 새 검색마다 필터·뷰 초기화
   compareIds.clear();
   renderCompareDock();
@@ -2716,6 +2858,7 @@ function renderPlace(p, opts = {}) {
   card.querySelector(".place-addr").textContent = addr;
   card.dataset.placeId = String(p.id);
   card.tabIndex = -1;
+  renderFranchiseRow(card, p, opts);
 
   // 별점 블록
   const imm = p._imm;
@@ -3631,12 +3774,17 @@ const TIER_LABEL = {
 };
 function renderResults() {
   els.results.innerHTML = "";
+  refreshFranchiseClassifications();
   const filtered = getVisibleResults();
   const hiddenCount = hiddenCountInResults();
+  const excludedFranchiseCount = excludeFranchises
+    ? lastResults.filter((p) => p._franchise?.kind === "franchise" || p._franchise?.kind === "chain").length
+    : 0;
   const ratedCount = lastResults.filter((p) => typeof p._imm.stars === "number").length;
   const unavailableCount = lastResults.filter((p) => p._imm.verified === false).length;
   els.resultMeta.textContent = `${lastResults.length}곳 중 현재 ${filtered.length}곳 · 별점 근거 충분 ${ratedCount}곳` +
     (hiddenCount ? ` · 숨김 ${hiddenCount}곳` : "") +
+    (excludedFranchiseCount ? ` · 프랜차이즈·체인 제외 ${excludedFranchiseCount}곳` : "") +
     (unavailableCount ? ` · 검증 일시 중단 ${unavailableCount}곳` : "");
 
   // ── 목록/지도 전환: 결과 수 바로 아래에서 먼저 보이게 배치 ──
@@ -3714,6 +3862,17 @@ function renderResults() {
   });
   quickChips.appendChild(openButton);
 
+  const franchiseButton = document.createElement("button");
+  franchiseButton.type = "button";
+  franchiseButton.className = "result-filter-btn" + (excludeFranchises ? " on" : "");
+  franchiseButton.setAttribute("aria-pressed", String(excludeFranchises));
+  franchiseButton.textContent = "🏠 프랜차이즈 제외";
+  franchiseButton.addEventListener("click", () => {
+    excludeFranchises = !excludeFranchises;
+    renderResults();
+  });
+  quickChips.appendChild(franchiseButton);
+
   if (searchMode === "overseas") {
     [["all", "가격 전체"], ["1", "₩"], ["2", "₩₩"], ["3plus", "₩₩₩+"]].forEach(([value, label]) => {
       const button = document.createElement("button");
@@ -3731,8 +3890,8 @@ function renderResults() {
   const controlNote = document.createElement("div");
   controlNote.className = "result-filter-note";
   controlNote.textContent = searchMode === "domestic"
-    ? "영업 중 필터는 누를 때만 구글 영업 정보를 확인하며 하루 동안 기기에 저장해요. 국내 가격대는 신뢰할 데이터가 없어 표시하지 않아요."
-    : "가격 정보가 없는 식당은 가격 필터를 선택하면 제외돼요.";
+    ? "프랜차이즈 필터는 확정 브랜드와 체인 추정만 제외하고, 애매한 식당은 남겨요. 영업 중 필터는 누를 때만 구글 정보를 확인해요."
+    : "프랜차이즈 필터는 주요 글로벌 브랜드와 체인 추정만 제외해요. 가격 정보가 없는 식당은 가격 필터 선택 시 제외돼요.";
   controls.appendChild(controlNote);
   els.results.appendChild(controls);
 
