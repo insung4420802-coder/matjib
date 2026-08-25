@@ -22,6 +22,7 @@ function classify(place, options = {}) {
 
 test("국내외 주요 프랜차이즈와 지역 체인을 구분한다", () => {
   assert.equal(classify({ id: "1", place_name: "스타벅스 강남R점" }).kind, "franchise");
+  assert.equal(classify({ id: "1-reserve", name: "스타벅스 리저브 로스터리 도쿄" }).kind, "franchise");
   assert.equal(classify({ id: "2", place_name: "홍콩반점0410 분당정자점" }).kind, "franchise");
   assert.equal(classify({ id: "3", name: "Din Tai Fung Xinyi Branch" }).kind, "franchise");
   const regional = classify({ id: "4", place_name: "성심당 DCC점" });
