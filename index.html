@@ -462,14 +462,28 @@
   }
   .tier-count { font-size: 11.5px; color: var(--ink-soft); margin-left: auto; }
 
-  /* 구글 평점 배지 (해외) */
+  /* 구글 평점 계층 카드 (해외) */
   .g-rating {
-    display: inline-flex; align-items: center; gap: 5px;
-    font-size: 12.5px; font-weight: 700; color: #1a73e8;
-    background: #eaf1fd; border-radius: 6px; padding: 3px 9px; margin-top: 8px;
+    display: grid; grid-template-columns: auto 1fr; gap: 2px 11px; align-items: center;
+    width: 100%; margin-top: 4px; padding: 10px 12px;
+    border: 1px solid #d9e4f7; border-radius: 10px; background: #f5f8fe;
   }
-  .g-rating .g-star { color: #f4b400; }
-  .g-count { font-weight: 500; color: var(--ink-soft); }
+  .g-rating-score {
+    grid-row: 1 / 3; display: flex; align-items: center; gap: 5px;
+    color: #174ea6; font-size: 22px; font-weight: 800; line-height: 1;
+  }
+  .g-rating .g-star { color: #f4b400; font-size: 19px; }
+  .g-rating-tier { color: #174ea6; font-size: 12.5px; font-weight: 800; }
+  .g-rating-meta { color: var(--ink-soft); font-size: 11.5px; }
+  .g-rating.top { border-color: #e8a13a; background: #fff8e8; box-shadow: 0 3px 10px rgba(232,161,58,.12); }
+  .g-rating.top .g-rating-score, .g-rating.top .g-rating-tier { color: #8a5a00; }
+  .g-rating.excellent { border-color: #9dc3ea; background: #eef6ff; }
+  .g-rating.high { border-color: #b8d6c0; background: #eff8f1; }
+  .g-rating.high .g-rating-score, .g-rating.high .g-rating-tier { color: #24613a; }
+  .g-rating.good { border-color: #d8d1c5; background: #faf8f3; }
+  .g-rating.good .g-rating-score, .g-rating.good .g-rating-tier { color: #5d554b; }
+  .g-rating.check { border-color: #ead7d0; background: #fff7f4; }
+  .g-rating.check .g-rating-score, .g-rating.check .g-rating-tier { color: #8a3b2d; }
 
   /* 가격대·영업중 배지 (해외) */
   .price-badge {
@@ -891,6 +905,7 @@
 
 <script src="/franchise-data.js"></script>
 <script src="/franchise.js"></script>
+<script src="/google-rating.js"></script>
 <script>
 "use strict";
 
@@ -914,9 +929,10 @@ let compareIds = new Set();     // 현재 검색에서 비교할 맛집(최대 3
 let favFolderFilter = "전체";   // 즐겨찾기 폴더 화면 필터
 let pendingMenuChoice = null;   // 추상 검색어를 구체 메뉴로 고르는 중인 상태
 let pendingMapPinId = null;     // 목록에서 지도로 이동할 때 자동으로 열 핀
-let resultSort = "recommended"; // recommended | distance | reviews | price
+let resultSort = "recommended"; // recommended | distance | reviews | googleRating | price
 let openNowOnly = false;        // 영업 중인 곳만 보기
 let priceFilter = "all";       // 해외 가격대 all | 1 | 2 | 3plus
+let googleRatingFilter = "all"; // 해외 구글 평점 all | 3.5 | 4.0 | top
 let openFilterLoading = false;  // 국내 영업 상태 일괄 확인 중
 let excludeFranchises = false;  // 프랜차이즈·체인 판정 결과 제외
 let lastPreparedConversion = null; // 지도 중심 재검색에서 AI 변환을 재사용
@@ -1316,6 +1332,8 @@ function sortVisibleResults(list) {
     sorted.sort((a, b) => resultDistance(a) - resultDistance(b));
   } else if (resultSort === "reviews") {
     sorted.sort((a, b) => resultReviewCount(b) - resultReviewCount(a) || resultDistance(a) - resultDistance(b));
+  } else if (resultSort === "googleRating") {
+    sorted.sort((a, b) => IMMGoogleRating.compare(a, b) || resultDistance(a) - resultDistance(b));
   } else if (resultSort === "price") {
     sorted.sort((a, b) => (resultPriceBucket(a) ?? 99) - (resultPriceBucket(b) ?? 99) || resultDistance(a) - resultDistance(b));
   }
@@ -1328,6 +1346,7 @@ function getVisibleResults() {
     if (minStars !== 0 && !(typeof p._imm.stars === "number" && p._imm.stars >= minStars)) return false;
     if (openNowOnly && p.openNow !== true) return false;
     if (searchMode === "overseas" && !matchesPriceFilter(p)) return false;
+    if (searchMode === "overseas" && !IMMGoogleRating.matchesFilter(p, googleRatingFilter)) return false;
     return true;
   });
   return sortVisibleResults(visible);
@@ -1490,6 +1509,7 @@ function setSearchMode(mode) {
   resultSort = "recommended";
   openNowOnly = false;
   priceFilter = "all";
+  googleRatingFilter = "all";
   openFilterLoading = false;
   excludeFranchises = false;
   lastPreparedConversion = null;
@@ -1849,6 +1869,7 @@ async function runSearch(options = {}) {
   resultSort = "recommended";
   openNowOnly = false;
   priceFilter = "all";
+  googleRatingFilter = "all";
   openFilterLoading = false;
   excludeFranchises = false;
   pendingMapPinId = null; // 새 검색마다 필터·뷰 초기화
@@ -2917,9 +2938,14 @@ function renderPlace(p, opts = {}) {
   const googleRating = imm?.googleRating ?? p.rating;
   const googleRatingCount = imm?.googleRatingCount ?? p.ratingCount ?? 0;
   if (overseas && googleRating != null && Number(googleRating) > 0) {
-    const g = document.createElement("span");
-    g.className = "g-rating";
-    g.innerHTML = `<span class="g-star">★</span>${Number(googleRating).toFixed(1)} <span class="g-count">구글 ${Number(googleRatingCount).toLocaleString()}개</span>`;
+    const ratingTier = IMMGoogleRating.tier(p);
+    const g = document.createElement("div");
+    g.className = `g-rating ${ratingTier.key}`;
+    g.setAttribute("aria-label", `Google 평점 ${Number(googleRating).toFixed(1)}점, 후기 근거 ${Number(googleRatingCount).toLocaleString()}개, ${ratingTier.label}`);
+    g.innerHTML =
+      `<span class="g-rating-score"><span class="g-star">★</span>${Number(googleRating).toFixed(1)}</span>` +
+      `<span class="g-rating-tier">Google · ${ratingTier.label}</span>` +
+      `<span class="g-rating-meta">평점 참여 ${Number(googleRatingCount).toLocaleString()}개 · ${ratingTier.evidence}</span>`;
     ratingEl.appendChild(g);
   }
   if (!ratingEl.children.length) {
@@ -3825,7 +3851,7 @@ function renderResults() {
     ["distance", "가까운 순"],
     ["reviews", "후기 많은 순"],
   ];
-  if (searchMode === "overseas") sortOptions.push(["price", "가격 낮은 순"]);
+  if (searchMode === "overseas") sortOptions.push(["googleRating", "구글 평점 높은 순"], ["price", "가격 낮은 순"]);
   sortOptions.forEach(([value, label]) => {
     const option = document.createElement("option");
     option.value = value; option.textContent = label; option.selected = resultSort === value;
@@ -3874,6 +3900,15 @@ function renderResults() {
   quickChips.appendChild(franchiseButton);
 
   if (searchMode === "overseas") {
+    [["all", "Google 평점 전체"], ["3.5", "★ 3.5+"], ["4.0", "★ 4.0+"], ["top", "🏅 4.5+ · 30개+"]].forEach(([value, label]) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "result-filter-btn" + (googleRatingFilter === value ? " on" : "");
+      button.setAttribute("aria-pressed", String(googleRatingFilter === value));
+      button.textContent = label;
+      button.addEventListener("click", () => { googleRatingFilter = value; renderResults(); });
+      quickChips.appendChild(button);
+    });
     [["all", "가격 전체"], ["1", "₩"], ["2", "₩₩"], ["3plus", "₩₩₩+"]].forEach(([value, label]) => {
       const button = document.createElement("button");
       button.type = "button";
@@ -3891,14 +3926,14 @@ function renderResults() {
   controlNote.className = "result-filter-note";
   controlNote.textContent = searchMode === "domestic"
     ? "프랜차이즈 필터는 확정 브랜드와 체인 추정만 제외하고, 애매한 식당은 남겨요. 영업 중 필터는 누를 때만 구글 정보를 확인해요."
-    : "프랜차이즈 필터는 주요 글로벌 브랜드와 체인 추정만 제외해요. 가격 정보가 없는 식당은 가격 필터 선택 시 제외돼요.";
+    : "Google 최상위는 평점 4.5 이상이면서 평점 참여 30개 이상인 곳이에요. 평점과 후기 규모를 함께 확인하세요.";
   controls.appendChild(controlNote);
   els.results.appendChild(controls);
 
   // ── 별점 필터와 후보 공유 ──
   const bar = document.createElement("div");
   bar.className = "filter-bar";
-  bar.innerHTML = '<span class="f-label">최소 별점</span>';
+  bar.innerHTML = `<span class="f-label">${searchMode === "overseas" ? "임슐랭 종합점수" : "최소 별점"}</span>`;
   [[0, "전체"], [3, "★3+"], [4, "★4+"], [4.5, "★4.5+"], [5, "★5"]].forEach(([v, label]) => {
     const b = document.createElement("button");
     b.className = "filter-chip" + (minStars === v ? " on" : "");
@@ -3950,7 +3985,7 @@ function renderResults() {
 
   // 추천순 외 정렬은 계층을 섞어 실제 거리·후기·가격 순서를 그대로 보여준다.
   if (resultSort !== "recommended") {
-    const labelMap = { distance: "가까운 순", reviews: "후기 많은 순", price: "가격 낮은 순" };
+    const labelMap = { distance: "가까운 순", reviews: "후기 많은 순", googleRating: "구글 평점 높은 순", price: "가격 낮은 순" };
     const group = filtered.filter((p) => !championVisible || p.id !== shownChampion.id);
     if (group.length) {
       const head = document.createElement("div");
