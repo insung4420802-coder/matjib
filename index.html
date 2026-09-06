@@ -1921,7 +1921,7 @@ async function runSearch(options = {}) {
     if (searchMode === "overseas" && options.resolvedMenu) {
       preparedConversion.focusedMenu = true;
     }
-    preparedConversion.constraints = [...new Set([...(preparedConversion.constraints || []), ...(options.preservedConstraints || [])])].slice(0, 8);
+    preparedConversion.constraints = [...new Set([...(preparedConversion.constraints || []), ...(options.preservedConstraints || []), ...(preparedConversion.theme || [])])].slice(0, 8);
     if (!options.resolvedMenu && preparedConversion.requiresMenuChoice &&
         (preparedConversion.menuCandidates || []).length > 1) {
       showState(null);
