@@ -928,6 +928,7 @@ import { rescoreWithRelevance } from './ranking.js';
 
 /* ───────── 상태 ───────── */
 let kakaoReady = false;
+let kakaoLoadFailed = false;
 let placesSvc = null;
 let searching = false;
 let searchGen = 0;              // 검색 세대 토큰 (이전 검색 잔상 방지)
@@ -1010,6 +1011,7 @@ const els = {
     placesSvc = new kakao.maps.services.Places();
   });
   s.onerror = () => {
+    kakaoLoadFailed = true;
     els.setupWarn.textContent = "카카오 SDK 로드에 실패했어요. JavaScript 키와 도메인 등록(플랫폼 > Web)을 확인해 주세요.";
     els.setupWarn.classList.add("show");
   };
@@ -1479,6 +1481,7 @@ function setSearchMode(mode) {
   els.modeOvs.classList.toggle("on", ovs);
   els.modeDom.setAttribute("aria-checked", String(!ovs));
   els.modeOvs.setAttribute("aria-checked", String(ovs));
+  els.setupWarn.style.display = ovs ? "none" : "";
   els.tagline.textContent = ovs
     ? "구글 평점과 현지·한국인 후기의 메뉴 근거를 함께 봐요"
     : "메뉴의 후기 근거와 주의점까지 살펴보세요";
@@ -1876,7 +1879,9 @@ async function runSearch(options = {}) {
   const q = els.query.value.trim();
   if (!q) return;
   if (searchMode === "domestic" && !kakaoReady) {
-    els.locStatus.textContent = "지도 서비스를 아직 불러오는 중이에요. 잠시 후 다시 시도해 주세요.";
+    els.locStatus.textContent = kakaoLoadFailed
+      ? "국내 지도 서비스를 불러오지 못했어요. 새 미리보기 주소라면 카카오에 이 도메인이 등록되어 있는지 확인해 주세요."
+      : "지도 서비스를 아직 불러오는 중이에요. 잠시 후 다시 시도해 주세요.";
     els.locStatus.className = "loc-status err";
     return;
   }
@@ -2197,7 +2202,7 @@ async function runOverseasSearch(q, gen, preparedConversion = null, originalQuer
 }
 
 async function convertKeywordsOverseas(q) {
-  const cacheKey = "ovs21:" + q;
+  const cacheKey = "ovs21b:" + q;
   const cached = readConversionCache(cacheKey);
   if (cached) return cached;
   try {

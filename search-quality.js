@@ -16,7 +16,7 @@ export function positiveMention(text, term) {
     const around = hay.slice(Math.max(0, offset - 12), offset + needle.length + 22);
     const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const negative = new RegExp(escaped + '(?:은|는|이|가|을|를|도)?(?:메뉴)?(?:없|안팔|안하|하지않|판매(?:하지|안|중단|종료)|제공(?:하지|안|중단|종료)|품절|못먹|아닌|아니|말고|isnotavailable|isntavailable|isn’tavailable|notavailable|isnolongerserved)|(?:no|without|notserving|notserve|dontserve|doesntserve)' + escaped, 'i');
-    const differentDish = ['소바', 'そば', 'soba'].includes(needle) && /(?:야키|焼き|yaki)$/.test(hay.slice(0, offset));
+    const differentDish = ['소바', 'そば', 'ソバ', '蕎麦', 'soba'].includes(needle) && /(?:야키|야끼|마제|중화|오키나와|焼き|焼|やき|ヤキ|まぜ|マゼ|中華|沖縄|yaki|maze|chuka|okinawa)$/.test(hay.slice(0, offset));
     if (!differentDish && !negative.test(around)) return true;
     offset = hay.indexOf(needle, offset + needle.length);
   }
