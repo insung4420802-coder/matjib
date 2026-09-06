@@ -22,7 +22,7 @@ test("국내·해외 후기 수집과 화면 노출 상한은 v12의 두 배 이
   assert.match(blog, /display=50/);
   assert.match(judge, /slice\(0, 50\)/);
   assert.match(judgeOverseas, /slice\(0, 50\)/);
-  assert.match(gplaces, /reviews \|\| \[\]\)\.slice\(0, 5\)/);
+  assert.match(gplaces, /Array\.isArray\(p\.reviews\) \? p\.reviews : \[\]\)\.slice\(0, 5\)/);
   assert.match(html, /realReviews\.slice\(0, 6\)/);
   assert.match(html, /gReviews\.slice\(0, 4\)/);
   assert.match(html, /krRealReviews\.slice\(0, 4\)/);
@@ -40,11 +40,10 @@ test("추상 검색어는 메뉴 후보와 직접 입력을 거쳐 한 메뉴로
   assert.match(html, /selectedRegion \|\| base\.region \|\| ""/);
   assert.match(html, /preparedConversion\.region = options\.regionHint/);
   assert.match(html, /preparedConversion\.focusedMenu = true/);
-  assert.match(html, /genericTerms\.has\(t\)/);
-  assert.match(html, /regionTerms\.includes\(t\)/);
-  assert.match(html, /const cuisineTerms = \[conv\.tiers\?\.broad, conv\.tiers\?\.broader\]/);
-  assert.match(html, /conv\.tiers\?\.broad/);
-  assert.match(html, /const cacheKey = "ovs6:"/);
+  assert.match(html, /relevanceForPlace\(p, conv\)/);
+  // v21 moves exact menu/alias relevance into the shared, behavior-tested module.
+  assert.match(html, /from '\.\/search-quality\.js'/);
+  assert.match(html, /const cacheKey = "ovs21:"/);
   assert.match(html, /let candidates = gResults\.filter\(\(p\) => p\._rel > 0\)/);
   assert.match(html, /candidates\.length === 0 && !conv\.focusedMenu/);
 });
