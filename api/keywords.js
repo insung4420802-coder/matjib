@@ -28,6 +28,7 @@ const SYSTEM_PROMPT_OVERSEAS = `너는 해외 구글맵 메뉴 검색어를 만�
 {"region":"도시/지역 영문명","gquery":["메뉴+지역"],"krquery":"지역 메뉴 맛집","match":["한/영/현지어 메뉴명"],"food":[],"theme":[],"constraints":[],"menuAliases":[],"menuCandidates":[{"label":"한국어 메뉴명","query":"영어/현지어 메뉴명"}],"requiresMenuChoice":false,"tiers":{"exact":"정확메뉴","broad":"상위메뉴","broader":"계열"},"confidence":0.9,"needsClarification":false}
 - region은 원문에서 확인되는 지역만 영문으로, 불명확하면 빈 문자열.
 - gquery는 같은 정확 메뉴의 영어/현지어 검색어 1~2개. 원문에 지역이 있으면 포함한다. 예: 오사카 소바 → ["soba Osaka","そば 大阪"].
+- 일반 '소바'는 메밀 소바다. 검색어는 'buckwheat soba' 또는 '蕎麦'를 우선 사용한다. 야키/야끼소바·마제소바·중화소바·오키나와소바는 서로 다른 메뉴이며 원문에 명시됐을 때만 그 메뉴로 검색한다. 넓은 soba 단어로 합치지 않는다.
 - krquery는 한국어 지역+정확 메뉴+맛집, 제외 재료는 긍정 검색어로 넣지 않는다.
 - match 최대 8개, food 최대 6개는 실제 메뉴명/직접동의어. theme 최대 4개. 구체적 메뉴를 Japanese/Thai/seafood 등의 일반 분류로 대체하지 않는다.
 - menuCandidates의 label은 한국어, query는 지역을 뺀 영어/현지어. 현지에서 찾을 수 있는 메뉴를 제안한다.
