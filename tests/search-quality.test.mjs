@@ -47,6 +47,11 @@ test("소바 검색에서 우동과 일식 카테고리만으로 정확 메뉴 �
 test("소바 글자가 포함돼도 야키소바를 메밀 소바의 정확 근거로 세지 않는다", () => {
   assert.equal(positiveMention("The yakisoba was wonderful", "soba"), false);
   assert.equal(positiveMention("야키소바를 먹었습니다", "소바"), false);
+  assert.equal(positiveMention("소금 야끼소바를 먹고 맛과 분위기에 반했어요", "소바"), false);
+  assert.equal(positiveMention("마제소바를 주문했습니다", "소바"), false);
+  assert.equal(positiveMention("焼きそばを食べました", "そば"), false);
+  assert.equal(positiveMention("중화소바가 맛있어요", "소바"), false);
+  assert.equal(positiveMention("메밀소바를 먹었습니다", "소바"), true);
   assert.equal(positiveMention("야키소바 대신 소바를 주문했어요", "소바"), true);
 });
 

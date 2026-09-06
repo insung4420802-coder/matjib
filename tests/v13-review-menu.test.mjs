@@ -43,7 +43,7 @@ test("추상 검색어는 메뉴 후보와 직접 입력을 거쳐 한 메뉴로
   assert.match(html, /relevanceForPlace\(p, conv\)/);
   // v21 moves exact menu/alias relevance into the shared, behavior-tested module.
   assert.match(html, /from '\.\/search-quality\.js'/);
-  assert.match(html, /const cacheKey = "ovs21:"/);
+  assert.match(html, /const cacheKey = "ovs21b:"/);
   assert.match(html, /let candidates = gResults\.filter\(\(p\) => p\._rel > 0\)/);
   assert.match(html, /candidates\.length === 0 && !conv\.focusedMenu/);
 });

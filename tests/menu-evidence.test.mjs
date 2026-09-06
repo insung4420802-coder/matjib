@@ -43,6 +43,43 @@ test("판매 종료 문구가 인용되면 긍정 메뉴 근거로 승격하지 
   assert.equal(result.menuStatus, "unknown");
 });
 
+test("소바 검색에서 야끼소바 등 이름이 겹치는 다른 음식을 supported로 승격하지 않는다", () => {
+  const quotes = [
+    "소금 야끼소바를 먹고 맛과 분위기에 반했어요",
+    "야키 소바를 주문해서 맛있게 먹었어요.",
+    "마제소바가 맛있어서 다시 방문했어요.",
+    "중화소바와 오키나와 소바를 먹었습니다.",
+    "The yaki soba was delicious and filling.",
+    "We had mazesoba and chuka soba for dinner.",
+    "The Okinawa soba was excellent.",
+    "焼きそばを食べてとても美味しかったです。",
+    "焼き蕎麦とヤキソバを注文して大満足でした。",
+    "まぜそばと中華そばと沖縄そばを食べました。",
+  ];
+  for (const menu of ["소바", "메밀 소바", "soba", "そば", "ソバ", "蕎麦", "buckwheat noodle", "buckwheat noodles"]) {
+    for (const quote of quotes) {
+      const input = request(); input.menu = menu; input.places[0].sources[0].text = quote;
+      const result = validateEvidenceResponse({ results: [row({ menuEvidence: [{ sourceId: "blog-1", quote }] })] }, sanitizeEvidenceInput(input)).results[0];
+      assert.equal(result.menuStatus, "unknown", `${menu}: ${quote}`);
+      assert.deepEqual(result.menuEvidence, []);
+    }
+  }
+});
+
+test("일반 소바의 실제 언급과 명시적으로 요청한 야끼소바는 계속 허용한다", () => {
+  for (const [menu, quote] of [
+    ["소바", "메밀소바를 먹었는데 향이 좋고 맛있었어요."],
+    ["soba", "The buckwheat noodles were delicious."],
+    ["메밀소바", "ざる蕎麦を食べて美味しかったです。"],
+    ["소바", "야끼소바와 소바를 각각 주문해 먹었어요."],
+    ["야끼소바", "소금 야끼소바를 먹고 맛과 분위기에 반했어요"],
+  ]) {
+    const input = request(); input.menu = menu; input.places[0].sources[0].text = quote;
+    const result = validateEvidenceResponse({ results: [row({ menuEvidence: [{ sourceId: "blog-1", quote }] })] }, sanitizeEvidenceInput(input)).results[0];
+    assert.equal(result.menuStatus, "supported", `${menu}: ${quote}`);
+  }
+});
+
 test("인용에서 단어·부정 표현을 자르거나 주변 판매 중단 문맥을 생략해도 긍정 근거가 되지 않는다", () => {
   const cases = [
     { text: "국물이 얼큰하지 않았어요.", quote: "국물이 얼큰" },
