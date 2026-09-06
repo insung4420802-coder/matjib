@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>임슐랭 가이드 — 광고 걸러낸 진짜 맛집만</title>
-<meta name="description" content="말하듯 검색하면 광고를 걸러낸 진짜 후기의 만족도로 근처 맛집을 찾아드립니다." />
+<meta name="description" content="원하는 메뉴의 후기 근거와 주의점을 확인하며 근처 맛집을 찾아보세요." />
 
 <!-- ─────────────────────────────────────────────
   ① 여기에 카카오 개발자 콘솔의 "JavaScript 키"를 넣어주세요.
@@ -743,6 +743,20 @@
   .delivery-status { min-height: 16px; margin-top: 6px; font-size: 11px; color: var(--kim); }
 
   .reviews { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px; }
+  .menu-evidence { margin: 12px 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: #f6f4ef; font-size: 13px; }
+  .menu-evidence.supported { border-color: #bed4c5; background: #edf5ef; }
+  .menu-evidence.conflict { border-color: #e7c4a7; background: #fff4e9; }
+  .menu-evidence > strong { display: block; color: var(--kim); font-size: 14px; }
+  .menu-evidence.conflict > strong { color: #8a431c; }
+  .menu-evidence p { margin-top: 6px; color: var(--ink-soft); }
+  .menu-evidence summary, .uncertain-reviews summary { cursor: pointer; padding: 8px 0 2px; font-weight: 600; }
+  .menu-evidence-quote { margin-top: 10px; }
+  .menu-evidence-quote b { font-size: 12px; }
+  .menu-evidence-quote blockquote { margin: 4px 0; padding-left: 9px; border-left: 2px solid #bdc9bd; overflow-wrap: anywhere; }
+  .menu-evidence-quote a { color: var(--kim); font-size: 12px; }
+  .menu-evidence-note { font-size: 11.5px; }
+  .evidence-overview { font-size: 12.5px; color: var(--ink-soft); padding: 10px 2px 14px; }
+  .uncertain-reviews { margin-top: 14px; font-size: 12.5px; color: var(--ink-soft); }
   .reviews-head { font-size: 12.5px; color: var(--ink-soft); display: flex; justify-content: space-between; }
   .ad-note { color: var(--kim); font-weight: 600; }
   .review { margin-top: 10px; }
@@ -793,7 +807,7 @@
           <button id="modeOvs" class="mode-btn" type="button" role="radio" aria-checked="false">✈️ 해외</button>
         </div>
         <div class="brand">임슐랭 가이드<span class="dot">★</span></div>
-        <div class="tagline" id="tagline">광고 걸러낸 진짜 후기의 만족도로 별점을 매깁니다</div>
+        <div class="tagline" id="tagline">메뉴의 후기 근거와 주의점까지 살펴보세요</div>
       </div>
       <button id="btnFavs" class="btn-favs" type="button">★ 즐겨찾기 <span id="favCount">0</span></button>
     </div>
@@ -906,11 +920,15 @@
 <script src="/franchise-data.js"></script>
 <script src="/franchise.js"></script>
 <script src="/google-rating.js"></script>
-<script>
+<script type="module">
+import { normIdentity, reviewMatchesPlace } from './review-identity.js';
+import { relevanceForPlace, acceptedReviews, evidenceSources, evidenceConflict, compareRecommendations } from './search-quality.js';
+import { rescoreWithRelevance } from './ranking.js';
 "use strict";
 
 /* ───────── 상태 ───────── */
 let kakaoReady = false;
+let kakaoLoadFailed = false;
 let placesSvc = null;
 let searching = false;
 let searchGen = 0;              // 검색 세대 토큰 (이전 검색 잔상 방지)
@@ -937,6 +955,8 @@ let openFilterLoading = false;  // 국내 영업 상태 일괄 확인 중
 let excludeFranchises = false;  // 프랜차이즈·체인 판정 결과 제외
 let lastPreparedConversion = null; // 지도 중심 재검색에서 AI 변환을 재사용
 let lastOriginalQuery = "";
+let menuEvidenceOnly = false;
+let evidenceRun = { checked: 0, refined: false };
 
 const HIDDEN_KEY = "imm_hidden_places_v1";
 const FRANCHISE_OVERRIDE_KEY = "imm_franchise_overrides_v1";
@@ -991,6 +1011,7 @@ const els = {
     placesSvc = new kakao.maps.services.Places();
   });
   s.onerror = () => {
+    kakaoLoadFailed = true;
     els.setupWarn.textContent = "카카오 SDK 로드에 실패했어요. JavaScript 키와 도메인 등록(플랫폼 > Web)을 확인해 주세요.";
     els.setupWarn.classList.add("show");
   };
@@ -1342,6 +1363,7 @@ function sortVisibleResults(list) {
 function getVisibleResults() {
   const visible = lastResults.filter((p) => {
     if (isPlaceHidden(p)) return false;
+    if (menuEvidenceOnly && (p._evidence?.menuStatus !== "supported" || evidenceConflict(p))) return false;
     if (excludeFranchises && (p._franchise?.kind === "franchise" || p._franchise?.kind === "chain")) return false;
     if (minStars !== 0 && !(typeof p._imm.stars === "number" && p._imm.stars >= minStars)) return false;
     if (openNowOnly && p.openNow !== true) return false;
@@ -1459,9 +1481,10 @@ function setSearchMode(mode) {
   els.modeOvs.classList.toggle("on", ovs);
   els.modeDom.setAttribute("aria-checked", String(!ovs));
   els.modeOvs.setAttribute("aria-checked", String(ovs));
+  els.setupWarn.style.display = ovs ? "none" : "";
   els.tagline.textContent = ovs
-    ? "구글 평점 + 한국인 후기로 해외 맛집을 찾아요"
-    : "광고 걸러낸 진짜 후기의 만족도로 별점을 매깁니다";
+    ? "구글 평점과 현지·한국인 후기의 메뉴 근거를 함께 봐요"
+    : "메뉴의 후기 근거와 주의점까지 살펴보세요";
   els.query.placeholder = ovs ? "예) 소바, 라멘, 스프카레" : "예) 낙지 들어간 얼큰한 짬뽕";
 
   // 반경 옵션: 국내는 항상, 해외는 '현재 위치' 모드일 때 의미 있음 → 둘 다 표시
@@ -1778,6 +1801,7 @@ function focusedMenuConversion(base, choice, mode) {
     return {
       ...base,
       gquery: [query],
+      menuAliases: [label, query],
       match: [...new Set([label, query].filter(Boolean))],
       menuCandidates: [{ label, query }],
       requiresMenuChoice: false,
@@ -1788,6 +1812,7 @@ function focusedMenuConversion(base, choice, mode) {
   return {
     ...base,
     keywords: [query],
+    menuAliases: [label, query],
     keywordPlan: [{ keyword: query, level: "exact" }],
     match: [label || query],
     food: [label || query],
@@ -1846,7 +1871,7 @@ function searchCustomMenu() {
     : null;
   hideMenuChoice();
   els.query.value = menu;
-  runSearch({ preparedConversion, originalQuery, resolvedMenu: true, regionHint });
+  runSearch({ preparedConversion, originalQuery, resolvedMenu: true, regionHint, preservedConstraints: base.constraints || [] });
 }
 
 /* ───────── 검색 파이프라인 ───────── */
@@ -1854,7 +1879,9 @@ async function runSearch(options = {}) {
   const q = els.query.value.trim();
   if (!q) return;
   if (searchMode === "domestic" && !kakaoReady) {
-    els.locStatus.textContent = "지도 서비스를 아직 불러오는 중이에요. 잠시 후 다시 시도해 주세요.";
+    els.locStatus.textContent = kakaoLoadFailed
+      ? "국내 지도 서비스를 불러오지 못했어요. 새 미리보기 주소라면 카카오에 이 도메인이 등록되어 있는지 확인해 주세요."
+      : "지도 서비스를 아직 불러오는 중이에요. 잠시 후 다시 시도해 주세요.";
     els.locStatus.className = "loc-status err";
     return;
   }
@@ -1872,6 +1899,8 @@ async function runSearch(options = {}) {
   googleRatingFilter = "all";
   openFilterLoading = false;
   excludeFranchises = false;
+  menuEvidenceOnly = false;
+  evidenceRun = { checked: 0, refined: false };
   pendingMapPinId = null; // 새 검색마다 필터·뷰 초기화
   compareIds.clear();
   renderCompareDock();
@@ -1897,10 +1926,17 @@ async function runSearch(options = {}) {
     if (searchMode === "overseas" && options.resolvedMenu) {
       preparedConversion.focusedMenu = true;
     }
+    preparedConversion.constraints = [...new Set([...(preparedConversion.constraints || []), ...(options.preservedConstraints || []), ...(preparedConversion.theme || [])])].slice(0, 8);
     if (!options.resolvedMenu && preparedConversion.requiresMenuChoice &&
         (preparedConversion.menuCandidates || []).length > 1) {
       showState(null);
       renderMenuChoice(q, preparedConversion);
+      return;
+    }
+    if (!options.resolvedMenu && preparedConversion.needsClarification) {
+      showState(null);
+      renderMenuChoice(q, preparedConversion);
+      els.menuChoiceHint.textContent = "원하는 음식이 분명하지 않아요. 메뉴를 고르거나 아래에 구체적으로 적어주세요.";
       return;
     }
 
@@ -1914,6 +1950,7 @@ async function runSearch(options = {}) {
       await runDomesticSearch(q, gen, preparedConversion, options.originalQuery || q);
     }
   } catch (e) {
+    if (gen !== searchGen) return;
     if (e && e.name === "AbortError") return;
     showState(null);
     els.locStatus.textContent = e.message || "검색 중 문제가 발생했어요.";
@@ -1930,7 +1967,8 @@ async function runSearch(options = {}) {
 async function runDomesticSearch(q, gen, preparedConversion = null, originalQuery = q) {
   {
     // 1) 감성 키워드 → 검색 키워드 + 매칭 동의어 + 계층 + 지역 감지 (Claude, 캐시 우선)
-    const { keywords, keywordPlan, match, food, theme, tiers, region, converted } = preparedConversion || await convertKeywords(q);
+    const conversion = preparedConversion || await convertKeywords(q);
+    const { keywords, keywordPlan, match, food, theme, tiers, region, converted } = conversion;
     if (gen !== searchGen) return;
     renderTicket(originalQuery, keywords, converted);
 
@@ -1938,6 +1976,7 @@ async function runDomesticSearch(q, gen, preparedConversion = null, originalQuer
     let center;
     if (region) {
       center = await geocodeByKeyword(region);
+      if (gen !== searchGen) return;
       if (center) {
         center.kind = "query";
         center.label = region;
@@ -1951,30 +1990,30 @@ async function runDomesticSearch(q, gen, preparedConversion = null, originalQuer
     // 3) 정확 메뉴부터 찾고, 결과가 부족할 때만 유사/상위 분류로 넓힌다.
     const radius = Number(document.querySelector('input[name="radius"]:checked').value);
     const places = await searchPlaces(keywordPlan?.length ? keywordPlan : keywords, center, radius);
-    lastSearchCenter = center || null;
     if (gen !== searchGen) return;
+    lastSearchCenter = center || null;
 
     if (places.length === 0) { showState("none"); return; }
 
     // 4) 후보 전체의 블로그 후기 수집 (병렬)
     els.loading.innerHTML = '<div class="spinner"></div>후기를 모으는 중…';
-    await Promise.all(places.map((p) => fetchReviews(p)));
+    await mapWithConcurrency(places, 4, (p) => fetchReviews(p, tiers?.exact || q));
     if (gen !== searchGen) return;
 
     // 5) 키워드 적합도 점수 → 적합도 0인 곳(엉뚱한 업종)은 제외
-    const foodTerms = ((food && food.length ? food : match) || keywords).map(normText);
-    const themeTerms = (theme || []).map(normText);
-    places.forEach((p) => { p._rel = scorePlace(p, foodTerms, themeTerms); });
+    places.forEach((p) => {
+      const relevance = relevanceForPlace(p, conversion);
+      p._rel = relevance.score; p._absoluteRel = relevance.absolute; p._tier = relevance.tier;
+    });
     const maxRel = Math.max(1, ...places.map((p) => p._rel));
     const candidates = places.filter((p) => p._rel > 0);
     if (candidates.length === 0) { showState("none"); return; }
 
     // 5-1) 계층 분류: exact(정확) / broad(비슷) / broader(계열)
-    candidates.forEach((p) => { p._tier = classifyTier(p, tiers); });
     currentTiers = tiers;
 
     // 6) 임슐랭 판정 엔드포인트에 후기+적합도 전달 → 별점 산정
-    els.loading.innerHTML = '<div class="spinner"></div>광고를 걸러내고 별점을 매기는 중…';
+    els.loading.innerHTML = '<div class="spinner"></div>후기의 근거와 만족도를 살펴보는 중…';
     const judged = await judgePlaces(candidates, maxRel);
     if (gen !== searchGen) return;
 
@@ -1984,28 +2023,20 @@ async function runDomesticSearch(q, gen, preparedConversion = null, originalQuer
     candidates.forEach((p) => {
       const j = byId[p.id] || {};
       p._imm = j;
-      p._cleanRel = scorePlace(p, foodTerms, themeTerms, j.realReviews || []);
-      p._tier = classifyTier(p, tiers, j.realReviews || []);
-    });
-    const cleanMaxRel = Math.max(1, ...candidates.map((p) => p._cleanRel || 0));
-    candidates.forEach((p) => {
-      if (p._imm?.breakdown) {
-        p._imm.breakdown.relevance = +(Math.max(0, p._cleanRel || 0) / cleanMaxRel).toFixed(3);
-      }
+      const clean = relevanceForPlace(p, conversion, acceptedReviews(p));
+      p._cleanRel = clean.score; p._absoluteRel = clean.absolute; p._tier = clean.tier;
+      p._imm = rescoreWithRelevance(p._imm, clean.absolute);
     });
 
     // 별점 높은 순 → 동점이면 점수 → 거리
     lastResults = candidates
       .filter((p) => p._imm && (p._imm.verified === false ? p._rel > 0 : p._cleanRel > 0))
-      .sort((a, b) =>
-        Number(b._imm.verified !== false) - Number(a._imm.verified !== false) ||
-        (b._imm.stars ?? -1) - (a._imm.stars ?? -1) ||
-        (b._cleanRel || 0) - (a._cleanRel || 0) ||
-        (b._imm.score100 || 0) - (a._imm.score100 || 0) ||
-        Number(a.distance) - Number(b.distance)
-      );
+      .sort(compareRecommendations);
 
     if (lastResults.length === 0) { showState("none"); return; }
+    await reviewMenuEvidence(lastResults, conversion, originalQuery, gen);
+    if (gen !== searchGen) return;
+    lastResults.sort(compareRecommendations);
     champion = pickChampion(lastResults);
     showState(null);
     renderResults();
@@ -2120,45 +2151,29 @@ async function runOverseasSearch(q, gen, preparedConversion = null, originalQuer
         p.distance = haversine(usedCenter.lat, usedCenter.lng, p.lat, p.lng);
       }
     });
-    const within = gResults.filter((p) => p.distance == null || p.distance <= radius * 1.2);
-    // 반경 내가 3곳 이상이면 엄격 적용, 부족하면 반경 2배까지 완화
-    gResults = within.length >= 3
-      ? within
-      : gResults.filter((p) => p.distance == null || p.distance <= radius * 2);
-    gResults.sort((a, b) => (a.distance || 0) - (b.distance || 0));
+    gResults = gResults.filter((p) => Number.isFinite(p.distance) && p.distance <= radius);
   }
 
   if (gResults.length === 0) { showState("none"); return; }
 
   // 3) 한국인 블로그 후기 수집 (가게명+지역 기준, 병렬)
   els.loading.innerHTML = '<div class="spinner"></div>한국인 후기를 모으는 중…';
-  await Promise.all(gResults.map((p) => fetchKrReviews(p, conv)));
+  await mapWithConcurrency(gResults, 4, (p) => fetchKrReviews(p, conv));
   if (gen !== searchGen) return;
 
   // 4) 적합도 + 계층
-  const genericTerms = new Set([
-    "restaurant", "restaurants", "food", "cuisine", "dining", "best", "recommended",
-    "맛집", "식당", "음식점", "음식", "요리", "추천", "베스트",
-  ]);
-  const regionTerms = String(conv.region || "").toLowerCase()
-    .split(/[\s,./-]+/).map(normText).filter((t) => t.length > 1);
-  const cuisineTerms = [conv.tiers?.broad, conv.tiers?.broader]
-    .map((value) => normText(String(value || "")
-      .replace(/restaurants?|cuisine|food|dining|음식점|음식|요리/gi, "")))
-    .filter(Boolean);
-  const terms = [...(conv.match && conv.match.length ? conv.match : conv.gquery), ...cuisineTerms]
-    .map(normText)
-    .filter((t) => t && !genericTerms.has(t) && !regionTerms.includes(t));
-  gResults.forEach((p) => { p._rel = scoreOverseasPlace(p, terms); });
+  gResults.forEach((p) => {
+    const relevance = relevanceForPlace(p, conv);
+    p._rel = relevance.score; p._absoluteRel = relevance.absolute; p._tier = relevance.tier;
+  });
   let candidates = gResults.filter((p) => p._rel > 0);
   // 메뉴명·업종·후기 제목 일치 결과가 하나도 없을 때만 구글 원순위를 안전망으로 사용한다.
   // 일치 결과가 있으면 무관한 일반 음식점이 높은 평점만으로 섞이지 않게 한다.
   if (candidates.length === 0 && !conv.focusedMenu) {
-    candidates = gResults.map((p) => ({ ...p, _rel: 1 }));
+    candidates = gResults.map((p) => ({ ...p, _rel: 1, _absoluteRel: 0, _tier: "broader" }));
   }
   if (candidates.length === 0) { showState("none"); return; }
   const maxRel = Math.max(1, ...candidates.map((p) => p._rel));
-  candidates.forEach((p) => { p._tier = classifyTierOverseas(p, conv.tiers); });
 
   // 5) 해외 판정 (구글 평점 + 한국인 후기)
   els.loading.innerHTML = '<div class="spinner"></div>평점을 종합하는 중…';
@@ -2166,23 +2181,28 @@ async function runOverseasSearch(q, gen, preparedConversion = null, originalQuer
   if (gen !== searchGen) return;
   const byId = {};
   judged.forEach((j) => { byId[j.id] = j; });
-  candidates.forEach((p) => { p._imm = byId[p.id] || {}; });
+  candidates.forEach((p) => {
+    p._imm = byId[p.id] || {};
+    const clean = relevanceForPlace(p, conv, acceptedReviews(p));
+    p._absoluteRel = clean.absolute; p._tier = clean.tier;
+    p._imm = rescoreWithRelevance(p._imm, clean.absolute, true);
+  });
 
   lastResults = candidates
     .filter((p) => p._imm)
-    .sort((a, b) =>
-      Number(b._imm.verified !== false) - Number(a._imm.verified !== false) ||
-      (b._imm.stars ?? -1) - (a._imm.stars ?? -1) ||
-      (b._imm.score100 || 0) - (a._imm.score100 || 0));
+    .sort(compareRecommendations);
 
   if (lastResults.length === 0) { showState("none"); return; }
+  await reviewMenuEvidence(lastResults, conv, originalQuery, gen);
+  if (gen !== searchGen) return;
+  lastResults.sort(compareRecommendations);
   champion = pickChampion(lastResults);
   showState(null);
   renderResults();
 }
 
 async function convertKeywordsOverseas(q) {
-  const cacheKey = "ovs6:" + q;
+  const cacheKey = "ovs21b:" + q;
   const cached = readConversionCache(cacheKey);
   if (cached) return cached;
   try {
@@ -2258,6 +2278,7 @@ function getGpsQuietly() {
 
 async function gplacesSearch(gquery, coords, region, radius) {
   let usedCenter = coords || null;
+  let locationError = null;
   const one = async (qq, index) => {
     let url = "/api/gplaces?query=" + encodeURIComponent(qq) + `&translate=${index === 0 ? 1 : 0}`;
     if (coords) url += `&lat=${coords.lat}&lng=${coords.lng}`;
@@ -2265,13 +2286,19 @@ async function gplacesSearch(gquery, coords, region, radius) {
     if (radius) url += `&radius=${radius}`;
     try {
       const r = await apiFetch(url);
-      if (!r.ok) return [];
       const data = await r.json();
+      if (!r.ok) {
+        if (data.code === 'REGION_NOT_FOUND' || data.code === 'INVALID_LOCATION') {
+          locationError = new Error('검색 위치를 확인하지 못했어요. 위치를 더 구체적으로 입력하거나 위치 후보를 선택해 주세요.');
+        }
+        return [];
+      }
       if (!usedCenter && data.center) usedCenter = data.center; // 서버가 지오코딩한 좌표
       return data.places || [];
     } catch (_) { return []; }
   };
   const lists = await Promise.all(gquery.map(one));
+  if (locationError) throw locationError;
   const seen = new Map();
   lists.flat().forEach((p) => { if (p.id && !seen.has(p.id)) seen.set(p.id, p); });
   return { list: [...seen.values()].slice(0, 20), center: usedCenter };
@@ -2289,11 +2316,11 @@ function haversine(lat1, lng1, lat2, lng2) {
 async function fetchKrReviews(p, conv) {
   try {
     const region = conv.region ? conv.region.split(",")[0] : "";
-    const q = p.name + " " + region + " 후기";
+    const q = p.name + " " + region + " " + (conv.tiers?.exact || "") + " 후기";
     const r = await apiFetch("/api/blog?query=" + encodeURIComponent(q));
     if (!r.ok) throw new Error();
     const data = await r.json();
-    p._reviews = data.items || [];
+    p._reviews = (data.items || []).filter((review) => reviewMatchesPlace(review, p.name));
   } catch (_) { p._reviews = []; }
 }
 
@@ -2302,6 +2329,7 @@ async function judgeOverseas(places, maxRel) {
     maxRelevanceScore: maxRel,
     places: places.map((p) => ({
       id: p.id, rating: p.rating, ratingCount: p.ratingCount,
+      placeName: p.name, absoluteRelevance: p._absoluteRel,
       rawRelevanceScore: p._rel,
       reviews: (p._reviews || []).map((r) => ({
         title: r.title, description: r.description, date: r.date, link: r.link, blogger: r.blogger,
@@ -2418,7 +2446,7 @@ function writeConversionCache(key, data) {
 }
 
 async function convertKeywords(q) {
-  const cacheKey = "kw7:" + q;
+  const cacheKey = "kw21:" + q;
   const cached = readConversionCache(cacheKey);
   if (cached) return cached;
 
@@ -2470,23 +2498,23 @@ async function searchPlaces(planOrKeywords, center, radius) {
     typeof item === "string"
       ? { keyword: item, level: index === 0 ? "exact" : "broad" }
       : { keyword: item.keyword, level: item.level || (index === 0 ? "exact" : "broad") }
-  ).filter((item) => item.keyword);
+  ).filter((item) => item.keyword).slice(0, 5);
   const priority = { exact: 0, broad: 1, broader: 2 };
 
-  const one = (item) =>
+  const one = (item, sort, weight) =>
     new Promise((resolve) => {
       // 검색마다 새 인스턴스 사용: 하나의 인스턴스를 병렬 호출하면 응답이 섞일 수 있음
       const svc = new kakao.maps.services.Places();
       svc.keywordSearch(
         item.keyword,
         (data, status) => resolve(status === kakao.maps.services.Status.OK
-          ? data.map((p) => ({ ...p, _sourceKeyword: item.keyword, _sourceLevel: item.level }))
+          ? data.filter((p) => p.id && Number(p.distance) <= radius).map((p, rank) => ({ ...p, _sourceKeyword: item.keyword, _sourceLevel: item.level, _retrievalScore: weight / (10 + rank) }))
           : []),
         {
           location: loc,
           radius,
           category_group_code: "FD6", // 음식점만
-          sort: kakao.maps.services.SortBy.DISTANCE,
+          sort,
           size: 15,
         }
       );
@@ -2502,10 +2530,18 @@ async function searchPlaces(planOrKeywords, center, radius) {
   const seen = new Map();
   const addGroup = async (items) => {
     if (!items.length) return;
-    const lists = await Promise.all(items.map(one));
+    const lists = await Promise.all(items.flatMap((item) => [
+      one(item, kakao.maps.services.SortBy.ACCURACY, 1),
+      one(item, kakao.maps.services.SortBy.DISTANCE, 0.4),
+    ]));
     lists.flat().forEach((p) => {
       const old = seen.get(p.id);
-      if (!old || priority[p._sourceLevel] < priority[old._sourceLevel]) seen.set(p.id, p);
+      if (!old) seen.set(p.id, p);
+      else {
+        const combined = old._retrievalScore + p._retrievalScore;
+        if (priority[p._sourceLevel] < priority[old._sourceLevel]) seen.set(p.id, { ...p, _retrievalScore: combined });
+        else old._retrievalScore = combined;
+      }
     });
   };
 
@@ -2515,12 +2551,13 @@ async function searchPlaces(planOrKeywords, center, radius) {
     if (seen.size < 12) await addGroup(groups.broader);
   }
 
-  // 후기 API는 상위 12곳에만 호출한다. 정확 검색 출처를 거리보다 우선한다.
+  // 정확도·거리 검색을 합쳐 관련 후보를 확보한 뒤 최대 20곳의 후기를 살핀다.
   return [...seen.values()]
     .sort((a, b) =>
       priority[a._sourceLevel] - priority[b._sourceLevel] ||
+      b._retrievalScore - a._retrievalScore ||
       Number(a.distance) - Number(b.distance))
-    .slice(0, 12);
+    .slice(0, 20);
 }
 
 /* ───────── 카드 렌더링 ───────── */
@@ -2541,26 +2578,16 @@ function dongOf(addr) {
 }
 
 /* ───────── 블로그 후기 원시 수집 (판정은 서버가 담당) ───────── */
-function normIdentity(value) {
-  return String(value || "").toLowerCase().replace(/<[^>]+>/g, "").replace(/[^0-9a-z가-힣]/g, "");
-}
-function reviewMatchesPlace(review, placeName) {
-  const fullName = normIdentity(placeName);
-  if (!fullName) return true;
-  const title = normIdentity(review?.title);
-  const description = normIdentity(review?.description);
-  if (title.includes(fullName)) return true;
-  const baseBrands = String(placeName || "").split(/[\s·|()[\]{}_,/\\-]+/)
-    .map(normIdentity).filter((token) => token.length >= 2 && !/^(본점|직영점|분점|매장|식당|음식점)$/.test(token));
-  const brands = [...new Set([...baseBrands,
-    ...baseBrands.map((token) => token.replace(/^(명품|원조|본가|진짜)/, "")).filter((token) => token.length >= 3)])];
-  if (brands.some((brand) => title.includes(brand))) return true;
-  return description.includes(fullName);
+async function mapWithConcurrency(items, limit, fn) {
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) { const item = items[next++]; await fn(item); }
+  }));
 }
 
-async function fetchReviews(p) {
+async function fetchReviews(p, menu = "") {
   try {
-    const q = p.place_name + " " + dongOf(p.address_name) + " 후기";
+    const q = p.place_name + " " + dongOf(p.address_name) + " " + menu + " 후기";
     const r = await apiFetch("/api/blog?query=" + encodeURIComponent(q));
     if (!r.ok) throw new Error();
     const data = await r.json();
@@ -2580,6 +2607,7 @@ async function judgePlaces(places, maxRel) {
       id: p.id,
       placeName: p.place_name,
       rawRelevanceScore: p._rel,
+      absoluteRelevance: p._absoluteRel,
       reviews: (p._reviews || []).map((r) => ({
         title: r.title, description: r.description,
         date: r.date, link: r.link, blogger: r.blogger,
@@ -2609,6 +2637,98 @@ async function judgePlaces(places, maxRel) {
 }
 
 /* ───────── 키워드 매칭 점수 ───────── */
+async function reviewMenuEvidence(list, conversion, originalQuery, gen) {
+  const mode = searchMode;
+  const shortlist = list.filter((p) => !isPlaceHidden(p)).filter((p) => {
+    p._evidenceSources = evidenceSources(p, conversion, mode);
+    return p._evidenceSources.length > 0;
+  }).slice(0, 5);
+  if (!shortlist.length) return;
+  els.loading.innerHTML = '<div class="spinner"></div>추천 후보의 메뉴 근거와 주의점을 확인하는 중…';
+  try {
+    const response = await apiFetch("/api/menu-evidence", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query: originalQuery, menu: conversion.tiers?.exact || els.query.value,
+        constraints: conversion.constraints || [], mode,
+        places: shortlist.map((p) => ({ id: String(p.id), name: p.place_name || p.name,
+          address: p.road_address_name || p.address_name || p.address, sources: p._evidenceSources })),
+      }),
+    });
+    if (!response.ok) throw new Error("evidence unavailable");
+    const data = await response.json();
+    if (gen !== searchGen) return;
+    evidenceRun = { checked: shortlist.length, refined: data.refined === true };
+    for (const p of shortlist) {
+      const result = (data.results || []).find((r) => String(r.id) === String(p.id));
+      if (result) p._evidence = { ...result, refined: data.refined === true, menu: conversion.tiers?.exact || els.query.value, requestedConstraints: conversion.constraints || [] };
+      if (p._evidence?.menuStatus === "contradicted") {
+        p._absoluteRel = 0; p._cleanRel = 0;
+        p._imm = rescoreWithRelevance(p._imm, 0, mode === "overseas");
+      }
+      if (evidenceConflict(p)) p._tier = "broader";
+      else if (p._evidence?.menuStatus === "supported") p._tier = "exact";
+    }
+  } catch (_) {
+    if (gen !== searchGen) return;
+    evidenceRun = { checked: shortlist.length, refined: false };
+    shortlist.forEach((p) => { p._evidence = { menuStatus: "unknown", refined: false, menu: conversion.tiers?.exact || "" }; });
+  }
+}
+
+function renderMenuEvidence(card, p) {
+  const evidence = p._evidence;
+  const box = document.createElement("section");
+  box.className = "menu-evidence" + (evidenceConflict(p) ? " conflict" : evidence?.menuStatus === "supported" ? " supported" : "");
+  box.setAttribute("aria-label", "메뉴별 후기 근거");
+  const title = document.createElement("strong");
+  title.textContent = evidenceConflict(p) ? "⚠ 메뉴·조건이 맞지 않는다는 언급" : evidence?.menuStatus === "supported"
+    ? "✓ 요청 메뉴 언급 확인" : evidence ? "메뉴 근거를 더 확인해 주세요" : "메뉴 근거 미검토";
+  box.appendChild(title);
+  if (!evidence || !evidence.refined) {
+    const note = document.createElement("p");
+    note.textContent = !evidence ? "아직 메뉴별 검토를 하지 않은 후보예요. 아래 후기와 지도에서 확인해 주세요."
+      : "현재 확보한 자료로 메뉴 검토를 완료하지 못했어요. 아래 후기에서 직접 확인해 주세요.";
+    box.appendChild(note);
+  } else {
+    const details = document.createElement("details");
+    const summary = document.createElement("summary");
+    summary.textContent = "메뉴 근거·주의점과 출처 보기";
+    details.appendChild(summary);
+    const appendQuote = (label, item) => {
+      const source = (p._evidenceSources || []).find((s) => s.id === item.sourceId);
+      if (!source || !item.quote) return;
+      const row = document.createElement("div"); row.className = "menu-evidence-quote";
+      const caption = document.createElement("b"); caption.textContent = label;
+      const quote = document.createElement("blockquote"); quote.textContent = item.quote;
+      const link = document.createElement("a"); link.href = safeHttpUrl(source.url, "#");
+      link.target = "_blank"; link.rel = "noopener noreferrer";
+      link.textContent = (source.kind === "google" ? "Google 후기" : "블로그 후기") + (source.date ? " · " + source.date : "") + " ↗";
+      row.append(caption, quote, link); details.appendChild(row);
+    };
+    (evidence.menuEvidence || []).forEach((item) => appendQuote("메뉴 관련 언급", item));
+    (evidence.strengths || []).forEach((item) => appendQuote("긍정적 언급", item));
+    (evidence.cautions || []).forEach((item) => appendQuote("주의할 점", item));
+    if (!(evidence.menuEvidence || []).length) {
+      const note = document.createElement("p"); note.textContent = "요청 메뉴를 뒷받침하는 인용 근거가 부족해요."; details.appendChild(note);
+    }
+    const requested = evidence.requestedConstraints || [];
+    requested.forEach((label) => {
+      const item = (evidence.constraints || []).find((c) => c.label === label);
+      const row = document.createElement("p");
+      row.className = "menu-evidence-condition";
+      row.textContent = label + " · " + (item?.status === "supported" ? "후기 언급 있음" : item?.status === "contradicted" ? "맞지 않는다는 언급" : "확인할 자료 부족");
+      details.appendChild(row);
+      if (item?.quote) appendQuote(label, item);
+    });
+    box.appendChild(details);
+    const note = document.createElement("p"); note.className = "menu-evidence-note";
+    note.textContent = (evidence.evaluatedAt ? new Date(evidence.evaluatedAt).toLocaleDateString("ko-KR") + " 검토 · " : "") + "일부 후기 기준이에요. 현재 판매 여부와 필요한 조건은 매장에 확인해 주세요.";
+    box.appendChild(note);
+  }
+  card.querySelector(".place-addr").before(box);
+}
+
 function normText(s) {
   return (s || "").toLowerCase().replace(/\s+/g, "");
 }
@@ -2871,7 +2991,7 @@ function renderPlace(p, opts = {}) {
     <div class="links">${linksHtml}</div>
     ${opts.compact ? "" : `
     <div class="reviews">
-      <div class="reviews-head"><span>${overseas ? "한국인 후기" : "진짜 후기만"}</span><span class="ad-note"></span></div>
+      <div class="reviews-head"><span>${overseas ? "한국인 후기" : "경험 신호가 있는 후기"}</span><span class="ad-note"></span></div>
       <div class="review-list"></div>
     </div>`}`;
 
@@ -2892,7 +3012,7 @@ function renderPlace(p, opts = {}) {
     if (!overseas && imm.realPct != null) {
       const basis = document.createElement("span");
       basis.className = "imm-basis";
-      basis.innerHTML = `진짜후기 <b>${imm.realPct}%</b> · ${imm.realCount}/${imm.totalReviews}개` +
+      basis.innerHTML = `경험 신호 후기 <b>${imm.realCount}개</b> · 판단 어려움 ${imm.uncertainCount || 0}개` +
         (imm.duplicateCount ? ` · 중복 ${imm.duplicateCount}건 제외` : "");
       ratingEl.appendChild(basis);
     }
@@ -2907,7 +3027,7 @@ function renderPlace(p, opts = {}) {
       ] : [
         ["후기 만족도", imm.breakdown.satisfaction],
         ["메뉴 적합도", imm.breakdown.relevance],
-        ["광고 안 낀 후기", imm.breakdown.authenticity],
+        ["후기 경험 신호", imm.breakdown.authenticity],
         ["최근 후기", imm.breakdown.recency],
       ];
       defs.forEach(([label, v]) => {
@@ -2930,7 +3050,7 @@ function renderPlace(p, opts = {}) {
   } else if (imm && imm.insufficient) {
     const badge = document.createElement("span");
     badge.className = "evidence-badge";
-    badge.textContent = `별점 자료 부족 · 진짜후기 ${imm.realCount || 0}개`;
+    badge.textContent = `별점 자료 부족 · 경험 신호 후기 ${imm.realCount || 0}개`;
     ratingEl.appendChild(badge);
   }
 
@@ -2962,6 +3082,7 @@ function renderPlace(p, opts = {}) {
   });
 
   if (opts.compact) return card;
+  renderMenuEvidence(card, p);
 
   // 해외: 가격대·영업중 배지 (별점 줄에 추가)
   if (overseas) {
@@ -3062,13 +3183,14 @@ function renderPlace(p, opts = {}) {
   const adNote = card.querySelector(".ad-note");
   const realReviews = (imm && imm.realReviews) || [];
   const excluded = [];
-  if (imm && imm.adCount > 0) excluded.push(`광고성 ${imm.adCount}건`);
+  if (imm && imm.adCount > 0) excluded.push(`광고 의심 ${imm.adCount}건`);
   if (imm && imm.duplicateCount > 0) excluded.push(`중복 ${imm.duplicateCount}건`);
   if (excluded.length) adNote.textContent = excluded.join(" · ") + " 제외";
 
   // 해외: 구글 현지 리뷰(번역) + 한국인 블로그 후기 둘 다
   if (overseas) {
     renderOverseasReviews(list, p, realReviews);
+    renderUncertainReviews(list, imm?.uncertainReviews || []);
     return card;
   }
 
@@ -3078,9 +3200,9 @@ function renderPlace(p, opts = {}) {
   } else if (p._reviewError) {
     list.innerHTML = '<div class="none">후기를 불러오지 못했어요. (네이버 API 키 설정을 확인해 주세요)</div>';
   } else if (realReviews.length === 0) {
-    list.innerHTML = '<div class="none">광고를 걸러내니 남는 진짜 후기가 없었어요.</div>';
+    list.innerHTML = '<div class="none">경험 신호가 충분한 후기가 없어요. 판단이 어려운 후기는 아래에서 볼 수 있습니다.</div>';
   } else {
-    card.querySelector(".reviews-head span").textContent = `진짜 후기 ${Math.min(realReviews.length, 6)}개 보기`;
+    card.querySelector(".reviews-head span").textContent = `경험 신호 후기 ${Math.min(realReviews.length, 6)}개 보기`;
     realReviews.slice(0, 6).forEach((rv) => {
       const d = document.createElement("div");
       d.className = "review";
@@ -3093,7 +3215,24 @@ function renderPlace(p, opts = {}) {
       list.appendChild(d);
     });
   }
+  renderUncertainReviews(list, imm?.uncertainReviews || []);
   return card;
+}
+
+function renderUncertainReviews(list, reviews) {
+  if (!reviews.length) return;
+  const details = document.createElement("details"); details.className = "uncertain-reviews";
+  const summary = document.createElement("summary");
+  summary.textContent = `광고·방문 여부 판단이 어려운 후기 ${Math.min(reviews.length, 6)}개 보기`;
+  details.appendChild(summary);
+  reviews.slice(0, 6).forEach((rv) => {
+    const row = document.createElement("div"); row.className = "review";
+    const link = document.createElement("a"); link.textContent = rv.title;
+    link.href = safeHttpUrl(rv.link, "#"); link.target = "_blank"; link.rel = "noopener noreferrer";
+    const text = document.createElement("p"); text.textContent = rv.description;
+    row.append(link, text); details.appendChild(row);
+  });
+  list.appendChild(details);
 }
 
 /* 해외: 구글 현지 리뷰(번역) + 한국인 블로그 후기 */
@@ -3110,13 +3249,13 @@ function renderOverseasReviews(list, p, krRealReviews) {
     gReviews.slice(0, 4).forEach((rv) => {
       const d = document.createElement("a");
       d.className = "review g-review";
-      d.href = gmapLink;
+      d.href = safeHttpUrl(rv.url || gmapLink, "#");
       d.target = "_blank";
       d.rel = "noopener";
       const ko = rv.textKo || (rv.lang && rv.lang.startsWith("ko") ? rv.text : "");
       const showKo = ko || rv.text || "";
       d.innerHTML =
-        `<div class="tr-ko">${rv.textKo ? '<span class="tr-badge">번역</span>' : ""}${escapeHtml(showKo.slice(0, 320))}</div>` +
+        `<div class="tr-ko">${rv.textKo ? '<span class="tr-badge">' + (rv.textKoPartial ? '일부 번역' : '번역') + '</span>' : ""}${escapeHtml(showKo.slice(0, 320))}</div>` +
         (rv.textKo ? `<div class="tr-orig">${escapeHtml((rv.text || "").slice(0, 180))}</div>` : "") +
         `<div class="rmeta">${escapeHtml(rv.author || "")}${rv.rating ? " · ★" + rv.rating : ""}${rv.time ? " · " + escapeHtml(rv.time) : ""} · 구글맵에서 보기 →</div>`;
       list.appendChild(d);
@@ -3144,42 +3283,6 @@ function renderOverseasReviews(list, p, krRealReviews) {
   if (!gReviews.length && (!krRealReviews || !krRealReviews.length)) {
     list.innerHTML = '<div class="none">아직 후기가 충분하지 않아요.</div>';
   }
-}
-
-/* 1등 AI 한줄평 (온디맨드, localStorage 캐시) */
-async function loadChampionSummary(p, card) {
-  const imm = p._imm || {};
-  const reviews = (imm.realReviews || []).slice(0, 5);
-  if (reviews.length < 2) return; // 근거 부족하면 요약 안 함
-
-  const box = document.createElement("div");
-  box.className = "champ-summary loading";
-  box.textContent = "임슐랭 심사평을 쓰는 중…";
-  const links = card.querySelector(".links");
-  if (links) card.insertBefore(box, links);
-  else card.appendChild(box);
-
-  const name = p.place_name || p.name || "";
-  const cacheKey = "sum2:" + p.id;
-  let summary = null;
-  try { summary = localStorage.getItem(cacheKey); } catch (_) {}
-
-  if (!summary) {
-    try {
-      const r = await apiFetch("/api/summary", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, reviews: reviews.map((rv) => ({ title: rv.title, description: rv.description })) }),
-      });
-      const data = await r.json();
-      summary = data.summary;
-      if (summary) try { localStorage.setItem(cacheKey, summary); } catch (_) {}
-    } catch (_) {}
-  }
-
-  if (!summary) { box.remove(); return; }
-  box.className = "champ-summary";
-  box.innerHTML = '<span class="cs-label">심 사 평</span>';
-  box.appendChild(document.createTextNode(summary));
 }
 
 function searchCenterInfo() {
@@ -3582,7 +3685,7 @@ function buildCandidateShareText(places, query, location) {
     const name = p.place_name || p.name || "맛집";
     const stars = typeof imm.stars === "number" ? `★${imm.stars.toFixed(1)}` : "별점 자료 부족";
     const distance = p.distance ? ` · ${fmtDist(p.distance)}` : "";
-    const evidence = imm.realCount ? ` · 진짜후기 ${imm.realCount}개` : (imm.googleRatingCount ? ` · 구글리뷰 ${Number(imm.googleRatingCount).toLocaleString()}개` : "");
+    const evidence = imm.realCount ? ` · 경험 신호 후기 ${imm.realCount}개` : (imm.googleRatingCount ? ` · 구글리뷰 ${Number(imm.googleRatingCount).toLocaleString()}개` : "");
     return `${index + 1}. ${name} — ${stars}${distance}${evidence}\n${candidateMapUrl(p)}`;
   });
   return `${heading}\n\n${lines.join("\n\n")}\n\n우리 어디로 갈까요?`;
@@ -3627,7 +3730,7 @@ function openCompareModal() {
     const name = p.place_name || p.name || "맛집";
     const cat = shortCat(p.category_name || p.category || "");
     const stars = typeof imm.stars === "number" ? `★ ${imm.stars.toFixed(1)}` : "별점 자료 부족";
-    const reviews = imm.realCount != null ? `진짜후기 ${imm.realCount}개` : (imm.googleRatingCount ? `구글리뷰 ${Number(imm.googleRatingCount).toLocaleString()}개` : "자료 없음");
+    const reviews = imm.realCount != null ? `경험 신호 후기 ${imm.realCount}개` : (imm.googleRatingCount ? `구글리뷰 ${Number(imm.googleRatingCount).toLocaleString()}개` : "자료 없음");
     const pct = (v) => typeof v === "number" ? `${Math.round(v * 100)}점` : "—";
     const col = document.createElement("section");
     col.className = "compare-col";
@@ -3660,7 +3763,7 @@ async function sharePlace(p, overseas, btn) {
   const url = overseas
     ? (p.mapUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name)}`)
     : p.place_url;
-  const extra = !overseas && imm.realPct != null ? ` (진짜후기 ${imm.realPct}%)` : "";
+  const extra = !overseas && imm.realPct != null ? ` (경험 신호 ${imm.realPct}%)` : "";
   const text = `👑 임슐랭 가이드 ${stars} ${name}${extra}`;
 
   try {
@@ -3781,7 +3884,7 @@ function pickChampion(list) {
   if (!list.length) return null;
   const eligible = list.filter((p) => {
     const imm = p._imm || {};
-    if (imm.verified === false || typeof imm.stars !== "number") return false;
+    if (imm.verified === false || typeof imm.stars !== "number" || p._evidence?.menuStatus !== "supported" || evidenceConflict(p)) return false;
     const overseas = p.rating != null && p.place_name === undefined;
     return overseas ? (imm.googleRatingCount || p.ratingCount || 0) >= 20 : (imm.realCount || 0) >= 3;
   });
@@ -3789,14 +3892,14 @@ function pickChampion(list) {
   const exact = eligible.filter((p) => p._tier === "exact");
   const broad = eligible.filter((p) => p._tier === "broad");
   const pool = exact.length ? exact : broad.length ? broad : eligible;
-  return pool.slice().sort((a, b) => championScore(b) - championScore(a))[0];
+  return pool.slice().sort(compareRecommendations)[0];
 }
 
 /* 결과 렌더: 상단 보기 전환 → 필터 → 1등 카드 → 지도 또는 계층 그룹 */
 const TIER_LABEL = {
-  exact: "정확히 일치",
+  exact: "요청 메뉴 관련 후보",
   broad: "비슷한 종류",
-  broader: "같은 계열",
+  broader: "추가 확인이 필요한 후보",
 };
 function renderResults() {
   els.results.innerHTML = "";
@@ -3808,7 +3911,7 @@ function renderResults() {
     : 0;
   const ratedCount = lastResults.filter((p) => typeof p._imm.stars === "number").length;
   const unavailableCount = lastResults.filter((p) => p._imm.verified === false).length;
-  els.resultMeta.textContent = `${lastResults.length}곳 중 현재 ${filtered.length}곳 · 별점 근거 충분 ${ratedCount}곳` +
+  els.resultMeta.textContent = `${lastResults.length}곳 중 현재 ${filtered.length}곳 · 후기 점수 제공 ${ratedCount}곳` +
     (hiddenCount ? ` · 숨김 ${hiddenCount}곳` : "") +
     (excludedFranchiseCount ? ` · 프랜차이즈·체인 제외 ${excludedFranchiseCount}곳` : "") +
     (unavailableCount ? ` · 검증 일시 중단 ${unavailableCount}곳` : "");
@@ -3866,6 +3969,12 @@ function renderResults() {
   filterWrap.innerHTML = '<span class="result-control-title">빠른 필터</span>';
   const quickChips = document.createElement("div");
   quickChips.className = "result-control-chips";
+  const menuFilter = document.createElement("button");
+  menuFilter.type = "button"; menuFilter.textContent = "✓ 메뉴 근거 확인된 곳";
+  menuFilter.className = menuEvidenceOnly ? "on" : "";
+  menuFilter.setAttribute("aria-pressed", String(menuEvidenceOnly));
+  menuFilter.addEventListener("click", () => { menuEvidenceOnly = !menuEvidenceOnly; renderResults(); });
+  quickChips.appendChild(menuFilter);
   const openButton = document.createElement("button");
   openButton.type = "button";
   openButton.className = "result-filter-btn" + (openNowOnly ? " on" : "");
@@ -3942,7 +4051,8 @@ function renderResults() {
     bar.appendChild(b);
   });
   const shareListBtn = document.createElement("button");
-  shareListBtn.className = "action-chip"; shareListBtn.type = "button"; shareListBtn.textContent = "📤 후보 3곳 공유";
+  shareListBtn.className = "action-chip"; shareListBtn.type = "button";
+  shareListBtn.textContent = `📤 후보 ${getComparePlaces().length || Math.min(3, filtered.length)}곳 공유`;
   shareListBtn.addEventListener("click", () => {
     const selected = getComparePlaces();
     shareCandidateList(selected.length ? selected : filtered.slice(0, 3), shareListBtn);
@@ -3958,6 +4068,13 @@ function renderResults() {
   }
   els.results.appendChild(bar);
 
+  const evidenceNote = document.createElement("p"); evidenceNote.className = "evidence-overview";
+  evidenceNote.textContent = evidenceRun.refined
+    ? `유력 후보 ${evidenceRun.checked}곳의 메뉴 근거를 검토했어요. 미검토·자료 부족은 메뉴가 없다는 뜻이 아닙니다.`
+    : "메뉴 근거가 충분히 확인된 추천이 아직 없어요. 각 후보의 후기와 지도 정보를 확인해 주세요.";
+  if (lastPreparedConversion?.constraints?.length) evidenceNote.textContent += " 요청 조건: " + lastPreparedConversion.constraints.join(" · ");
+  els.results.appendChild(evidenceNote);
+
   // ── 1등 맛집 카드 ──
   const shownChampion = champion && filtered.includes(champion) ? champion : pickChampion(filtered);
   const championVisible = !!shownChampion;
@@ -3965,7 +4082,7 @@ function renderResults() {
     const crown = document.createElement("div");
     crown.className = "champ-banner";
     const crownLabel = shownChampion._tier === "exact"
-      ? "정확 메뉴 중 1등"
+      ? "메뉴 근거를 확인한 추천"
       : shownChampion._tier === "broad"
         ? "비슷한 메뉴 중 추천"
         : "같은 계열 중 추천";
@@ -3974,7 +4091,7 @@ function renderResults() {
     const champCard = renderPlace(shownChampion, { champion: true });
     champCard.classList.add("is-champion");
     els.results.appendChild(champCard);
-    if (shownChampion === champion) loadChampionSummary(shownChampion, champCard); // 기존 1등만 AI 한줄평 (비동기, 캐시)
+    // 메뉴 근거 검토가 한줄평을 대체하므로 재렌더링 때 AI를 다시 호출하지 않는다.
   }
 
   // ── 지도 모드: 1등 카드 바로 아래에 표시 ──

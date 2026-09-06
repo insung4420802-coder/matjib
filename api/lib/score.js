@@ -1,3 +1,6 @@
+import { reviewMatchesPlace } from "../../review-identity.js";
+import { combine, combineOverseas, toStars } from "../../ranking.js";
+
 // ────────────────────────────────────────────────────────────────
 // 임슐랭 별점 엔진
 // 광고 판별·후기 만족도·증거 신뢰도를 분리해 별점과 추천 순위를 만든다.
@@ -27,6 +30,7 @@ const REAL_SIGNAL = [
   /내돈내산/, /제\s*돈\s*주고/, /솔직\s*후기/, /재방문/, /또\s*갈/, /단골/,
   /웨이팅/, /대기\s*(시간|줄)/, /줄\s*서서/, /아쉬웠/, /별로였/, /실망/,
   /가성비/, /혼밥/, /포장\s*해/, /직접\s*가/,
+  /직접\s*(?:방문|먹|다녀)/, /먹어\s*봤/, /먹었/, /주문\s*했/,
 ];
 
 // 진짜 후기의 만족도 신호. 광고 여부와 맛 만족도는 서로 다른 문제이므로
@@ -36,12 +40,25 @@ const POSITIVE_SIGNAL = [
   /추천/, /재방문/, /또\s*갈/, /단골/, /친절/, /신선/, /푸짐/, /깔끔/,
 ];
 const NEGATIVE_SIGNAL = [
-  /맛없/, /별로였?/, /실망/, /최악/, /다시\s*안\s*갈/, /재방문\s*(의사|생각)\s*(없|X)/i,
-  /추천\s*(하지|안)\s*(않|함|해)/, /친절하지\s*않/, /깔끔하지\s*않/,
+  /맛없/, /별로였?/, /실망/, /최악/, /다시\s*안\s*갈/, /재방문\s*(의사|생각)(?:은|는|가)?\s*(없|X)/i,
+  /또\s*갈\s*(?:의사|생각)(?:은|는|가)?\s*없/,
+  /추천\s*(?:하지\s*않|안\s*(?:함|해))/, /친절하(?:지|지는)\s*않/, /깔끔하(?:지|지는)\s*않/,
+  /맛있(?:지|지는)\s*않/, /만족(?:스럽지|하지|스럽지는|하지는)\s*않/,
+  /(?:훌륭하|신선하|푸짐하)(?:지|지는)\s*않/,
   /불친절/, /비위생/, /너무\s*(짜|달|맵)/, /싱거/, /질기/, /냄새\s*(나|심)/,
   /가격\s*(대비|에\s*비해).*비싸/,
 ];
 const NEGATIVE_WEAK_SIGNAL = [/아쉬웠?/, /조금\s*(짜|달|맵)/, /대기\s*(길|오래)/];
+// 같은 문장의 "친절"과 "친절하지 않다"를 동시에 가산하지 않는다.
+// 문맥 전체의 감정 분석은 아니며, 명시적인 부정 표현만 보수적으로 처리한다.
+const NEGATED_POSITIVE = [
+  /(?:맛있|훌륭하|친절하|신선하|푸짐하|깔끔하)(?:지|지는)\s*않[가-힣]*/g,
+  /만족(?:스럽지|하지|스럽지는|하지는)\s*않[가-힣]*/g,
+  /추천\s*(?:하지\s*않[가-힣]*|안\s*(?:함|해[가-힣]*))/g,
+  /재방문\s*(?:의사|생각)(?:은|는|가)?\s*(?:없[가-힣]*|X)/gi,
+  /또\s*갈\s*(?:의사|생각)(?:은|는|가)?\s*없[가-힣]*/g,
+  /불친절/g,
+];
 
 // 텍스트 하나(제목+요약)에 대한 광고 확률 판정 → 0(진짜)~1(광고)
 // 강한 협찬 문구(제공받아/원고료/체험단 등)가 하나라도 있으면,
@@ -57,16 +74,23 @@ function adScore(text) {
   return s;
 }
 
-// 후기 배열을 판정 → 각 후기에 isAd/adProb 부여, 진짜후기 수 집계
+// 광고 단서가 없는 것만으로 실제 방문 후기로 확정하지 않는다.
+// real은 기존 응답 호환용 이름이며, 경험 표현이 있는 비광고 추정 후기를 뜻한다.
 function classifyReviews(reviews) {
   const judged = reviews.map((r) => {
     const text = (r.title || "") + " " + (r.description || "");
     const forced = r.forcedVerdict || (r._forceAd ? "ad" : r._forceReal ? "real" : null);
     const prob = forced === "ad" ? 1 : forced === "real" ? 0 : adScore(text);
-    return { ...r, adProb: prob, isAd: forced ? forced === "ad" : prob >= 0.5 };
+    const isAd = forced ? forced === "ad" : prob >= 0.5;
+    const experienceText = text.replace(/내돈내산\s*(?:아닌|아님|아니[가-힣]*)/g, " ");
+    const hasExperience = REAL_SIGNAL.some((pattern) => pattern.test(experienceText));
+    const isUncertain = !isAd && forced !== "real" && (forced === "uncertain" || !hasExperience);
+    return { ...r, adProb: prob, isAd, isUncertain,
+      reviewVerdict: isAd ? "ad" : isUncertain ? "uncertain" : "experience" };
   });
-  const real = judged.filter((r) => !r.isAd);
-  return { judged, real, adCount: judged.length - real.length };
+  const real = judged.filter((r) => !r.isAd && !r.isUncertain);
+  const uncertain = judged.filter((r) => r.isUncertain);
+  return { judged, real, uncertain, adCount: judged.filter((r) => r.isAd).length };
 }
 
 // 동일 링크 또는 동일 블로거의 동일 제목은 표본을 부풀리지 않도록 한 건으로 센다.
@@ -92,46 +116,15 @@ function dedupeReviews(reviews) {
 // 네이버 검색 결과에는 같은 동네의 다른 지점·목록성 글이 섞일 수 있다.
 // 제목에 상호 핵심어가 있거나, 요약에 전체 상호가 명시된 글만 해당 매장
 // 후기의 근거로 사용한다. 상호 정보가 없는 해외 보조 후기에는 적용하지 않는다.
-function normIdentity(value) {
-  return String(value || "")
-    .toLowerCase()
-    .replace(/<[^>]+>/g, "")
-    .replace(/[^0-9a-z가-힣]/g, "");
-}
-
-function placeNameTokens(placeName) {
-  const base = String(placeName || "")
-    .split(/[\s·|()[\]{}_,/\\-]+/)
-    .map(normIdentity)
-    .filter((token) => token.length >= 2 && !/^(본점|직영점|분점|매장|식당|음식점)$/.test(token));
-  const aliases = base.map((token) => token.replace(/^(명품|원조|본가|진짜)/, ""))
-    .filter((token) => token.length >= 3);
-  return [...new Set([...base, ...aliases])];
-}
-
-function reviewMatchesPlace(review, placeName) {
-  if (!placeName) return true;
-  const fullName = normIdentity(placeName);
-  const title = normIdentity(review?.title);
-  const description = normIdentity(review?.description);
-  if (!fullName) return true;
-
-  // 제목은 가장 강한 증거다. 전체 상호 또는 첫 번째 고유 상호어가 있어야 한다.
-  if (title.includes(fullName)) return true;
-  const brands = placeNameTokens(placeName);
-  if (brands.some((brand) => title.includes(brand))) return true;
-
-  // 제목이 축약된 경우에만 요약의 전체 상호를 보조 증거로 허용한다.
-  return description.includes(fullName);
-}
-
 function filterReviewsForPlace(reviews, placeName) {
   return dedupeReviews(reviews).filter((review) => reviewMatchesPlace(review, placeName));
 }
 
 function reviewSatisfaction(text) {
+  text = String(text || "");
+  const positiveText = NEGATED_POSITIVE.reduce((cleaned, pattern) => cleaned.replace(pattern, " "), text);
   let positive = 0, negative = 0, weakNegative = 0;
-  for (const p of POSITIVE_SIGNAL) if (p.test(text)) positive++;
+  for (const p of POSITIVE_SIGNAL) if (p.test(positiveText)) positive++;
   for (const p of NEGATIVE_SIGNAL) if (p.test(text)) negative++;
   for (const p of NEGATIVE_WEAK_SIGNAL) if (p.test(text)) weakNegative++;
   if (positive === 0 && negative === 0 && weakNegative === 0) return 0.55;
@@ -186,7 +179,11 @@ function authenticityScore(realCount, totalCount, prior = 0.5, k = 4) {
 
 // ── 키워드 적합도(0~1) ──
 // 클라이언트 scorePlace(원점수)를 넘겨받아 정규화. maxScore는 이번 검색 결과 중 최고점.
-function relevanceScore(rawScore, maxScore) {
+function relevanceScore(rawScore, maxScore, absoluteRelevance) {
+  // 새 클라이언트의 메뉴 근거 수준을 우선한다. 구형 호출은 기존 비율을 유지한다.
+  if (typeof absoluteRelevance === "number" && Number.isFinite(absoluteRelevance)) {
+    return Math.max(0, Math.min(1, absoluteRelevance));
+  }
   if (maxScore <= 0) return 0;
   return Math.max(0, Math.min(1, rawScore / maxScore));
 }
@@ -194,32 +191,6 @@ function relevanceScore(rawScore, maxScore) {
 // ── 추천 순위용 결합 ──
 // 만족도를 주축으로 적합도·후기량·최신성을 더하고 authenticity를 게이트로 쓴다.
 // 별 아이콘은 이 종합점수가 아니라 만족도 자체에서 계산한다.
-function combine({ authenticity, volume, recency, relevance, satisfaction = 0.55 }) {
-  // 만족도를 주축으로 삼고, 적합도·증거량·최신성은 추천 순위를 보조한다.
-  const quality =
-    0.50 * satisfaction +
-    0.20 * relevance +
-    0.15 * volume +
-    0.15 * recency;
-  const gate = 0.45 + 0.55 * authenticity; // 광고 비중이 높으면 상한을 더 강하게 누름
-  const score01 = quality * gate;
-  return { quality, gate, score01, score100: Math.round(score01 * 100) };
-}
-
-// ── 별점 환산 (1~5, 0.5 단위) ──
-// 임슐랭은 깐깐하게: 별을 후하게 주지 않는다. 컷을 높게 잡음.
-function toStars(score100) {
-  if (score100 >= 78) return 5;
-  if (score100 >= 66) return 4.5;
-  if (score100 >= 55) return 4;
-  if (score100 >= 45) return 3.5;
-  if (score100 >= 36) return 3;
-  if (score100 >= 28) return 2.5;
-  if (score100 >= 21) return 2;
-  if (score100 >= 14) return 1.5;
-  return 1;
-}
-
 // 국내 별점은 추천 종합점수가 아니라 진짜 후기의 만족도를 1~5로 표현한다.
 function toSatisfactionStars(score01) {
   if (score01 >= 0.82) return 5;
@@ -238,12 +209,12 @@ function toSatisfactionStars(score01) {
 function evaluatePlace(place, now = Date.now()) {
   const sourceReviews = place.reviews || [];
   const reviews = filterReviewsForPlace(sourceReviews, place.placeName);
-  const { judged, real, adCount } = classifyReviews(reviews);
+  const { judged, real, uncertain, adCount } = classifyReviews(reviews);
 
   const authenticity = authenticityScore(real.length, judged.length);
   const volume = volumeScore(real.length);
   const recency = recencyScore(real, now);
-  const relevance = relevanceScore(place.rawRelevanceScore || 0, place.maxRelevanceScore || 1);
+  const relevance = relevanceScore(place.rawRelevanceScore || 0, place.maxRelevanceScore || 1, place.absoluteRelevance);
   const satisfaction = satisfactionScore(real);
 
   const { quality, gate, score100 } = combine({ authenticity, volume, recency, relevance, satisfaction });
@@ -273,8 +244,10 @@ function evaluatePlace(place, now = Date.now()) {
     collectedReviews: sourceReviews.length,
     excludedCount: sourceReviews.length - judged.length,
     adCount,
+    uncertainCount: uncertain.length,
     realPct,
-    realReviews: real, // UI에 진짜 후기만 노출
+    realReviews: real, // 경험 신호가 있는 비광고 추정. 실제 방문을 보증하지 않는다.
+    uncertainReviews: uncertain,
   };
 }
 
@@ -296,10 +269,11 @@ function bayesianRating(rating, count, prior = 3.8, k = 20) {
 function evaluateOverseasPlace(place, now = Date.now()) {
   const rating = place.rating || 0;              // 구글 평점 0~5
   const ratingCount = place.ratingCount || 0;    // 구글 리뷰 수
-  const krReviews = place.reviews || [];         // 한국인 블로그 후기(원시)
+  const sourceReviews = place.reviews || [];     // 한국인 블로그 후기(원시)
+  const krReviews = filterReviewsForPlace(sourceReviews, place.placeName);
 
   // 한국인 블로그도 광고 판정(국내 로직 재사용)
-  const { real, adCount } = classifyReviews(krReviews);
+  const { real, uncertain, adCount } = classifyReviews(krReviews);
 
   // 축1: 베이지안 보정 평점 → 0~1
   const adjRating = bayesianRating(rating, ratingCount);
@@ -316,16 +290,13 @@ function evaluateOverseasPlace(place, now = Date.now()) {
     : 0;
 
   // 축4: 적합도
-  const relevance = relevanceScore(place.rawRelevanceScore || 0, place.maxRelevanceScore || 1);
+  const relevance = relevanceScore(place.rawRelevanceScore || 0, place.maxRelevanceScore || 1, place.absoluteRelevance);
 
-  // 결합: 구글 평점이 주축(신뢰도로 게이트), 한국인 후기·적합도는 가산
-  const gate = 0.6 + 0.4 * countScore; // 리뷰 수 적으면 상한 눌림
-  const quality =
-    0.50 * ratingScore +
-    0.25 * relevance +
-    0.25 * krScore;
-  const score01 = quality * gate;
-  const score100 = Math.round(score01 * 100);
+  // 한국인 블로그가 적다는 이유로 현지 식당을 크게 감점하지 않도록 보너스는 5%만 둔다.
+  // 메뉴 근거가 약한 곳은 높은 평점·블로그 수만으로 적합한 후보를 넘기 어렵게 한다.
+  const { quality, gate, score100 } = combineOverseas({
+    rating: ratingScore, relevance, krBuzz: krScore, reviewCount: countScore,
+  });
   const stars = toStars(score100);
 
   return {
@@ -339,11 +310,17 @@ function evaluateOverseasPlace(place, now = Date.now()) {
       reviewCount: +countScore.toFixed(3),
       krBuzz: +krScore.toFixed(3),
       relevance: +relevance.toFixed(3),
+      quality: +quality.toFixed(3),
+      gate: +gate.toFixed(3),
     },
     realCount: real.length,
     totalReviews: krReviews.length,
+    collectedReviews: sourceReviews.length,
+    excludedCount: sourceReviews.length - krReviews.length,
     adCount,
+    uncertainCount: uncertain.length,
     realReviews: real,
+    uncertainReviews: uncertain,
   };
 }
 
