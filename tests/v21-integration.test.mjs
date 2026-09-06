@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
+import { rescoreWithRelevance } from "../ranking.js";
 
 const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const script = [...html.matchAll(/<script\s+type="module"[^>]*>([\s\S]*?)<\/script>/g)].map((match) => match[1]).join("\n");
@@ -21,6 +22,7 @@ function evidenceHarness(fetcher, generation = 1) {
     isPlaceHidden: (place) => place.hidden === true,
     evidenceSources: (place) => place.availableSources || [],
     evidenceConflict: (place) => place._evidence?.menuStatus === "contradicted",
+    rescoreWithRelevance,
     apiFetch: fetcher,
   });
   vm.runInContext(functionSource("reviewMenuEvidence"), context);
@@ -92,6 +94,26 @@ test("출처가 없는 후보만 있으면 증거 API를 호출하지 않는다"
   await context.reviewMenuEvidence([{ id: 1, name: "식당" }], { tiers: { exact: "소바" } }, "소바", 1);
   assert.equal(calls, 0);
   assert.equal(context.evidenceRun.checked, 0);
+});
+
+test("오션뷰·룸 같은 기존 테마도 메뉴 검토 조건에서 누락하지 않는다", () => {
+  const run = functionSource("runSearch");
+  const line = run.split('\n').find((line) => line.includes('preparedConversion.constraints ='));
+  const context = vm.createContext({ preparedConversion: { constraints: ['주차 가능'], theme: ['오션뷰'] }, options: { preservedConstraints: ['해산물 제외'] } });
+  vm.runInContext(line, context);
+  assert.deepEqual(Array.from(context.preparedConversion.constraints), ['주차 가능', '해산물 제외', '오션뷰']);
+});
+
+test("메뉴 판매 종료 근거는 표시뿐 아니라 메뉴 적합도·실제 점수도 낮춘다", async () => {
+  const context = evidenceHarness(async () => ({ ok: true, json: async () => ({ refined: true,
+    results: [{ id: 'closed-menu', menuStatus: 'contradicted', constraints: [] }] }) }));
+  const place = { id: 'closed-menu', name: '식당', availableSources: [{ id: 'g0', text: 'Soba is no longer served.', url: 'https://example.com/r' }],
+    _absoluteRel: 0.9, _tier: 'exact', _imm: { verified: true, score100: 90, stars: 5, breakdown: { rating: 0.9, reviewCount: 0.9, krBuzz: 0.5, relevance: 0.9 } } };
+  await context.reviewMenuEvidence([place], { tiers: { exact: '소바' } }, '소바', 1);
+  assert.equal(place._tier, 'broader');
+  assert.equal(place._absoluteRel, 0);
+  assert.equal(place._imm.breakdown.relevance, 0);
+  assert.ok(place._imm.score100 < 90);
 });
 
 test("늦게 도착한 이전 검색의 증거 성공·실패 응답은 새 검색 상태를 바꾸지 않는다", async () => {
