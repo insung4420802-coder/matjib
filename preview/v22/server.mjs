@@ -6,7 +6,7 @@ import { RoomStore } from './room-store.mjs';
 import { parseMenuPhoto } from './menu-api.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
-const staticFiles = new Set(['index.html', 'style.css', 'app.js', 'shared.js', 'rooms.js', 'menu.js', 'menu-core.js', 'menu-pages.js', 'menu-photo-list.js', 'menu-photo-optimize.js', 'meet.js', 'meet-core.js', 'rooms.css', 'menu.css', 'meet.css']);
+const staticFiles = new Set(['index.html', 'style.css', 'app.js', 'shared.js', 'handoff.js', 'rooms.js', 'menu.js', 'menu-core.js', 'menu-pages.js', 'menu-photo-list.js', 'menu-photo-optimize.js', 'meet.js', 'meet-core.js', 'rooms.css', 'menu.css', 'meet.css']);
 const mime = { html: 'text/html; charset=utf-8', css: 'text/css; charset=utf-8', js: 'text/javascript; charset=utf-8' };
 function fail(message, status = 400) { return Object.assign(new Error(message), { status }); }
 function json(res, status, body) { res.writeHead(status, {'Content-Type': 'application/json; charset=utf-8'}); res.end(JSON.stringify(body)); }

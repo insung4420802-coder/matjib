@@ -9,9 +9,12 @@ const DEMO = [
 ];
 const unpack = data => data.room || data;
 
-export function mountRooms(root) {
+export function mountRooms(root, { hosted = false, candidates: initialCandidates = [] } = {}) {
   let room = null, token = '', memberId = '', busy = false, error = '', destroyed = false, revision = 0, closeActiveConfirmation = null;
-  let candidates = DEMO.map(x=>({...x}));
+  let pollPausedUntil = 0, pollFailures = 0, pollTerminal = false, refreshing = false;
+  const emptyCandidates = () => hosted ? [{name:'',menu:'',address:''},{name:'',menu:'',address:''}] : DEMO.map(x=>({...x}));
+  let candidates = initialCandidates.length ? initialCandidates.slice(0,5).map(c=>({name:c.name,menu:c.menu,address:c.address})) : emptyCandidates();
+  while(candidates.length<2)candidates.push({name:'',menu:'',address:''});
   const params = new URLSearchParams(location.search), inviteId = params.get('room');
   let roomId = inviteId || '';
   let forcedJoin = params.get('join') === '1';
@@ -53,6 +56,7 @@ export function mountRooms(root) {
   }
   function saveSession(data) {
     room = data.room; roomId=room.id; token=data.memberToken;
+    pollPausedUntil=0;pollFailures=0;pollTerminal=false;
     memberId=room.members[room.members.length-1].id;
     try {sessionStorage.setItem(KEY+roomId,JSON.stringify({token,memberId}));} catch {}
     forcedJoin=false;
@@ -61,13 +65,14 @@ export function mountRooms(root) {
     const next = new URL(location.href); next.search=''; next.searchParams.set('room',roomId);
     if(forJoin) next.searchParams.set('join','1'); next.hash='rooms'; return next.href;
   }
-  const notice = `<div class="notice">실제 검색과 분리된 로컬 체험입니다. 초대 링크는 이 컴퓨터에서만 열리며, 모임은 48시간 후 또는 서버 재시작 시 사라집니다.</div>`;
+  const notice = `<div class="notice">${hosted ? '링크로 지인을 초대해 의견을 모아요. 닉네임·후보·투표는 48시간 저장 후 만료됩니다. 초대 링크를 가진 사람이 참여할 수 있으니 개인 연락처나 민감한 내용은 쓰지 마세요.' : '실제 검색과 분리된 로컬 체험입니다. 초대 링크는 이 컴퓨터에서만 열리며, 모임은 48시간 후 또는 서버 재시작 시 사라집니다.'}</div>`;
   function candidateInputs(c,i) {
     return `<div class="candidate stack" data-candidate-index="${i}"><div class="row"><strong>후보 ${i+1}</strong><button type="button" class="btn btn-quiet" data-remove="${i}" ${candidates.length<=2?'disabled':''}>삭제</button></div><label class="field">식당 이름<input name="candidate-name-${i}" value="${esc(c.name)}" maxlength="80" required placeholder="예: 식당 이름"></label><div class="grid-2"><label class="field">주요 메뉴<input name="candidate-menu-${i}" value="${esc(c.menu)}" maxlength="80" placeholder="예: 파스타"></label><label class="field">주소 또는 위치<input name="candidate-address-${i}" value="${esc(c.address)}" maxlength="160" placeholder="정확한 주소를 입력해 주세요"></label></div></div>`;
   }
   function renderCreate(keep = {}) {
     root.innerHTML=`<div class="stack">${notice}<div class="panel stack"><div><span class="eyebrow">01 · 함께 고르는 한 끼</span><h2 class="section-title">우리 뭐 먹지?</h2><p class="muted">링크 한 개로 의견을 모으고, 모두가 괜찮은 한 곳을 골라요.</p></div><form id="room-create" class="stack"><div class="grid-2"><label class="field">모임 이름<input name="title" required maxlength="60" value="${esc(keep.title||'주말 점심 어디서 먹을까?')}"></label><label class="field">내 닉네임<input name="nickname" required maxlength="20" value="${esc(keep.nickname||'모임장')}"></label></div><label class="field">모임 시간 <span class="muted">(선택)</span><input type="datetime-local" name="meetingAt" value="${esc(keep.meetingAt||'')}"></label><div class="row"><h3>식당 후보</h3><span class="badge">2~5곳</span></div><p class="muted">아래는 동작 확인을 위한 가상 예시입니다. 실제 식당 이름과 메뉴로 바꿔도 돼요.</p>${candidates.map(candidateInputs).join('')}<button type="button" class="btn btn-quiet" id="room-add" ${candidates.length>=5?'disabled':''}>+ 후보 추가</button><div id="room-error" class="error" role="alert">${esc(error)}</div><button type="submit" class="btn btn-primary" ${busy?'disabled':''}>${busy?'모임 만드는 중…':'이 후보로 모임 만들기'}</button></form></div></div>`;
     const form=root.querySelector('#room-create');
+    if(hosted) form.querySelector('p.muted').textContent='검색에서 가져온 후보 또는 직접 입력한 식당을 확인해 주세요. 주소와 주요 메뉴는 직접 수정할 수 있어요.';
     const capture=()=>{const f=new FormData(form);candidates=candidates.map((_,i)=>({name:String(f.get(`candidate-name-${i}`)||''),menu:String(f.get(`candidate-menu-${i}`)||''),address:String(f.get(`candidate-address-${i}`)||'')})); return {title:String(f.get('title')||''),nickname:String(f.get('nickname')||''),meetingAt:String(f.get('meetingAt')||'')};};
     root.querySelector('#room-add').onclick=()=>{const keep=capture();candidates.push({name:'',menu:'',address:''});renderCreate(keep);};
     root.querySelectorAll('[data-remove]').forEach(el=>el.onclick=()=>{const keep=capture();candidates.splice(Number(el.dataset.remove),1);renderCreate(keep);});
@@ -78,7 +83,7 @@ export function mountRooms(root) {
         const meetingAt=values.meetingAt?new Date(values.meetingAt).toISOString():'';
         const created=await api('/rooms',{method:'POST',body:{...values,meetingAt,candidates}});
         if(destroyed||revision!==requestRevision)return;saveSession(created);
-        history.replaceState(null,'',url());busy=false;renderRoom();notify('모임을 만들었어요. 다른 참여자로 들어가 투표를 체험해 보세요.');
+        history.replaceState(null,'',url());busy=false;renderRoom();notify(hosted ? '모임을 만들었어요. 초대 링크를 지인에게 보내 주세요.' : '모임을 만들었어요. 다른 참여자로 들어가 투표를 체험해 보세요.');
       } catch(e){if(revision===requestRevision){error=e.message;renderCreate(values);}} finally{if(revision===requestRevision){busy=false;const b=root.querySelector('button[type="submit"]');if(b){b.disabled=false;b.textContent='이 후보로 모임 만들기';}}}
     };
   }
@@ -113,7 +118,12 @@ export function mountRooms(root) {
       const x=counts(c),mine=room.votes[memberId]?.[c.id],consensus=x.pending===0&&x.no===0;
       return `<article class="candidate stack"><div class="row"><h3>${esc(c.name)}</h3><span class="badge">${room.decision===c.id?'최종 선택':consensus?'모두 괜찮아요':x.no?'의견이 갈려요':'투표 기다리는 중'}</span></div><p>${esc(c.menu||'메뉴 정보 없음')}</p><p class="muted">${esc(c.address||'주소 정보 없음')}</p><div class="row">${OPTIONS.map(([value,label])=>`<button class="btn ${mine===value?'btn-primary':'btn-quiet'}" data-vote="${c.id}" data-value="${value}" aria-pressed="${mine===value}" ${room.decision||busy?'disabled':''}>${label} ${x[value]}</button>`).join('')}</div><p class="muted">미응답 ${x.pending}명 · ${room.members.map(m=>`${esc(m.nickname)}: ${OPTIONS.find(([v])=>v===room.votes[m.id]?.[c.id])?.[1]||'미응답'}`).join(' / ')}</p>${host&&!room.decision?`<button class="btn ${consensus?'btn-primary':'btn-quiet'}" data-decide="${c.id}" ${!consensus||busy?'disabled':''}>${consensus?'이 식당으로 확정':'모두의 동의가 필요해요'}</button>`:''}</article>`;
     }).join('')}</div><div class="row"><button id="room-new" class="btn btn-quiet">다른 모임 만들기</button>${host?'<button id="room-delete" class="btn btn-quiet">이 모임 삭제</button>':''}<span class="muted">자동 만료: ${esc(new Date(room.expiresAt).toLocaleString('ko-KR'))}</span></div></div>`;
-    root.querySelector('#room-copy').onclick=async()=>{try{await navigator.clipboard.writeText(url());notify('로컬 초대 링크를 복사했어요. 이 컴퓨터에서만 열 수 있어요.');}catch{error='자동 복사를 사용할 수 없어요. 주소창의 링크를 복사해 주세요.';renderRoom();}};
+    if(hosted){
+      root.querySelector('a[target="_blank"]').textContent='다른 참여자로 열기 ↗';
+      const copyHint=[...root.querySelectorAll('p.muted')].find(p=>p.textContent.startsWith('이 컴퓨터의 다른 탭'));
+      if(copyHint)copyHint.textContent='초대 링크를 지인에게 보내 주세요. 화면이 보이는 동안 약 30초마다 의견을 갱신해요. 참여했던 탭을 닫으면 본인 권한을 잃을 수 있어요.';
+    }
+    root.querySelector('#room-copy').onclick=async()=>{try{await navigator.clipboard.writeText(url());notify(hosted ? '초대 링크를 복사했어요. 이 링크로 지인을 초대하세요.' : '로컬 초대 링크를 복사했어요. 이 컴퓨터에서만 열 수 있어요.');}catch{error='자동 복사를 사용할 수 없어요. 주소창의 링크를 복사해 주세요.';renderRoom();}};
     root.querySelector('#room-refresh').onclick=()=>refresh(true);
     root.querySelector('#room-new').onclick=reset;
     root.querySelectorAll('[data-vote]').forEach(el=>el.onclick=()=>mutate('votes',{candidateId:el.dataset.vote,value:el.dataset.value}));
@@ -139,18 +149,20 @@ export function mountRooms(root) {
     };
   }
   async function mutate(path,body) {
-    if(busy)return;const requestRevision=revision,requestRoomId=roomId;busy=true;error='';renderRoom();
+    if(busy)return;const requestRevision=++revision,requestRoomId=roomId;busy=true;error='';renderRoom();
     try{const next=unpack(await api(`/rooms/${requestRoomId}/${path}`,{method:'POST',headers:auth(),body}));if(revision===requestRevision&&roomId===requestRoomId&&!destroyed)room=next;}
     catch(e){if(revision===requestRevision&&roomId===requestRoomId)error=e.message;}
     finally{if(revision===requestRevision&&roomId===requestRoomId&&!destroyed){busy=false;renderRoom();}}
   }
   async function refresh(manual=false) {
-    if(!roomId||!token||busy||destroyed||closeActiveConfirmation)return;
-    const requestId=roomId,requestToken=token;
-    try{const next=unpack(await api(`/rooms/${roomId}`,{headers:auth()}));if(destroyed||roomId!==requestId||token!==requestToken||busy||closeActiveConfirmation)return;if(JSON.stringify(next)!==JSON.stringify(room)||manual){room=next;error='';renderRoom();}}
-    catch(e){if(destroyed||roomId!==requestId||token!==requestToken||closeActiveConfirmation)return;error=e.message;if(room)renderRoom();else renderJoin();}
+    if(!roomId||!token||busy||destroyed||closeActiveConfirmation||refreshing||(!manual&&(pollTerminal||Date.now()<pollPausedUntil)))return;
+    refreshing=true;
+    const requestId=roomId,requestToken=token,requestRevision=revision;
+    try{const next=unpack(await api(`/rooms/${roomId}`,{headers:auth()}));if(destroyed||roomId!==requestId||token!==requestToken||revision!==requestRevision||busy||closeActiveConfirmation)return;pollFailures=0;pollPausedUntil=0;pollTerminal=false;if(JSON.stringify(next)!==JSON.stringify(room)||manual){room=next;error='';renderRoom();}}
+    catch(e){if(destroyed||roomId!==requestId||token!==requestToken||revision!==requestRevision||closeActiveConfirmation)return;pollFailures++;pollPausedUntil=Date.now()+Math.min(300000,30000*2**Math.min(pollFailures,4));pollTerminal=[401,404,410].includes(e.status);error=e.message;if(room)renderRoom();else renderJoin();}
+    finally{refreshing=false;}
   }
-  function reset(){revision++;closeActiveConfirmation?.(false);room=null;token='';memberId='';roomId='';error='';busy=false;candidates=DEMO.map(x=>({...x}));const next=new URL(location.href);next.search='';next.hash='rooms';history.replaceState(null,'',next.href);renderCreate();}
+  function reset(){revision++;closeActiveConfirmation?.(false);room=null;token='';memberId='';roomId='';error='';busy=false;candidates=emptyCandidates();const next=new URL(location.href);next.search='';next.hash='rooms';history.replaceState(null,'',next.href);renderCreate();}
   if(roomId&&token){root.innerHTML='<div class="panel">모임을 불러오는 중…</div>';refresh();}else if(roomId){renderJoin();}else{renderCreate();}
   const onCandidates=async event=>{
     const incoming=event.detail?.candidates;
@@ -167,6 +179,6 @@ export function mountRooms(root) {
     renderCreate({title:'중간 지점에서 함께 먹어요'});notify('식당 후보를 모임 만들기에 넣었어요. 후보와 시간을 확인해 주세요.');
   };
   window.addEventListener('preview:room-candidates',onCandidates);
-  const interval=setInterval(()=>{if(visible()&&room)refresh();},4000);
+  const interval=setInterval(()=>{if(visible()&&room&&!room.decision)refresh();},hosted?30000:4000);
   return ()=>{destroyed=true;closeActiveConfirmation?.(false);clearInterval(interval);window.removeEventListener('preview:room-candidates',onCandidates);};
 }

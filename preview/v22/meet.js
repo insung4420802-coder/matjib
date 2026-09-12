@@ -19,9 +19,9 @@ const copy = value => JSON.parse(JSON.stringify(value));
 const km = value => value < 0.1 && value > 0 ? `${Math.round(value * 1000)}m` : `${value.toFixed(1)}km`;
 const e = value => escapeHtml(String(value ?? ''));
 
-export function mountMeet(root) {
-  let origins = stations.slice(0, 3).map((point, i) => ({ ...point, id: `origin-${i}`, person: `참여자 ${i + 1}`, station: String(i) }));
-  let candidates = copy(demos);
+export function mountMeet(root, { hosted = false, candidates: initialCandidates = [] } = {}) {
+  let origins = hosted ? [0,1].map(i=>({id:`origin-${i}`,person:`참여자 ${i+1}`,name:'',lat:'',lng:'',station:'manual'})) : stations.slice(0, 3).map((point, i) => ({ ...point, id: `origin-${i}`, person: `참여자 ${i + 1}`, station: String(i) }));
+  let candidates = copy(hosted ? initialCandidates : demos);
   let results = [];
   let center = null;
   let error = '';
@@ -66,7 +66,7 @@ export function mountMeet(root) {
 
   function candidateCard(candidate, index) {
     return `<section class="candidate">
-      <div class="row" style="justify-content:space-between"><span class="badge">${candidate.demo ? '가상 예시' : '직접 입력'} ${index + 1}</span><button class="btn btn-quiet" data-meet-action="remove-candidate" data-id="${e(candidate.id)}" aria-label="후보 ${index + 1} 삭제">삭제</button></div>
+      <div class="row" style="justify-content:space-between"><span class="badge">${candidate.demo ? '가상 예시' : candidate.source === 'search' ? '검색에서 가져옴' : '직접 입력'} ${index + 1}</span><button class="btn btn-quiet" data-meet-action="remove-candidate" data-id="${e(candidate.id)}" aria-label="후보 ${index + 1} 삭제">삭제</button></div>
       <label class="field">후보 이름<input data-candidate="${e(candidate.id)}" data-key="name" value="${e(candidate.name)}" maxlength="80" placeholder="식당 또는 만날 장소"></label>
       <div class="grid-2">
         <label class="field">위도<input type="number" step="any" min="-90" max="90" data-candidate="${e(candidate.id)}" data-key="lat" value="${e(candidate.lat)}" inputmode="decimal"></label>
@@ -80,7 +80,7 @@ export function mountMeet(root) {
   function resultCard(place, index) {
     const maxBar = Math.max(0.1, ...results.flatMap(result => result.distances.map(item => item.km)));
     return `<article class="candidate meet-result ${index === 0 ? 'meet-best' : ''}">
-      <div class="row" style="justify-content:space-between"><span class="badge">${index === 0 ? '거리 균형 1순위' : `${index + 1}순위`}</span>${place.demo ? '<span class="muted">가상 예시</span>' : '<span class="muted">직접 입력 후보</span>'}</div>
+      <div class="row" style="justify-content:space-between"><span class="badge">${index === 0 ? '거리 균형 1순위' : `${index + 1}순위`}</span><span class="muted">${place.demo ? '가상 예시' : place.source === 'search' ? '검색에서 가져온 후보' : '직접 입력 후보'}</span></div>
       <h3>${e(place.name)}</h3>
       <p class="muted">${e(place.address || '주소 미입력')}</p>
       <div class="meet-metrics"><div><span class="muted">가장 먼 참여자</span><strong>${km(place.maximumKm)}</strong></div><div><span class="muted">평균 직선거리</span><strong>${km(place.averageKm)}</strong></div><div><span class="muted">참여자 간 거리 차이</span><strong>${km(place.spreadKm)}</strong></div></div>
@@ -111,11 +111,17 @@ export function mountMeet(root) {
       .meet-root .meet-result p{margin-top:0}
     </style>
     <div class="meet-root stack">
-      <div class="meet-intro"><div class="eyebrow">FAIR MEETUP · LOCAL PREVIEW</div><h2>어디서 만나야 공평할까?</h2><p>한 사람만 멀리 오지 않도록, <strong>가장 먼 사람의 직선거리</strong>가 짧은 후보부터 비교해요.</p><p class="muted">현재는 좌표 계산 시제품입니다. 식당 검색·대중교통·Google Routes는 연결하지 않았습니다. 기본 후보는 실제 식당이 아닌 가상 예시입니다.</p></div>
+      <div class="meet-intro"><div class="eyebrow">FAIR MEETUP · ${hosted ? '함께 비교' : 'LOCAL PREVIEW'}</div><h2>어디서 만나야 공평할까?</h2><p>한 사람만 멀리 오지 않도록, <strong>가장 먼 사람의 직선거리</strong>가 짧은 후보부터 비교해요.</p><p class="muted">${hosted ? '검색 화면에서 가져온 식당 또는 직접 입력한 후보의 거리를 비교합니다. 먼저 출발지를 2곳 이상 입력하세요. 실제 이동시간·대중교통 경로는 반영하지 않습니다.' : '현재는 좌표 계산 시제품입니다. 식당 검색·대중교통·Google Routes는 연결하지 않았습니다. 기본 후보는 실제 식당이 아닌 가상 예시입니다.'}</p></div>
       <section class="panel stack"><div class="row" style="justify-content:space-between;flex-wrap:wrap"><h3 class="section-title">1. 출발지를 알려주세요</h3><span class="muted">2~6명 · 현재 ${origins.length}명</span></div><p class="muted">역 선택은 대략적인 좌표입니다. 직접 입력하거나 버튼을 눌러 내 위치를 사용할 수 있어요. 출발지 좌표는 서버에 보내거나 저장하지 않습니다.</p><div class="meet-editor-grid">${origins.map(originCard).join('')}</div><div class="meet-actions"><button class="btn" data-meet-action="add-origin" ${origins.length >= 6 ? 'disabled' : ''}>+ 출발지 추가</button><button class="btn btn-quiet" data-meet-action="reset">서울 예시로 다시 보기</button></div></section>
       <section class="panel stack"><div class="row" style="justify-content:space-between;flex-wrap:wrap"><h3 class="section-title">2. 만날 후보를 비교해요</h3><span class="muted">최대 50곳 · 현재 ${candidates.length}곳</span></div><p class="muted">이 미리보기는 입력한 후보끼리만 비교합니다. 1순위는 전체 지역의 최적 장소나 맛집 순위를 뜻하지 않습니다.</p><details><summary>후보 좌표 확인·직접 수정하기</summary><div class="meet-editor-grid">${candidates.map(candidateCard).join('') || '<p class="empty">아직 후보가 없습니다. 장소를 추가해 주세요.</p>'}</div></details><div class="meet-actions"><button class="btn" data-meet-action="add-candidate" ${candidates.length >= 50 ? 'disabled' : ''}>+ 후보 직접 추가</button><button class="btn btn-primary" data-meet-action="calculate">거리 균형 계산하기</button></div><p id="meet-dirty" class="notice" ${dirty ? '' : 'hidden'}>입력 내용이 바뀌었습니다. 다시 계산하면 결과에 반영됩니다.</p>${error ? `<p class="error" role="alert">${e(error)}</p>` : ''}</section>
       <section class="panel stack" id="meet-results"><div class="row" style="justify-content:space-between;flex-wrap:wrap"><h3 class="section-title">3. 모두의 거리를 한눈에</h3><span class="badge">직선거리 비교 · 이동시간 아님</span></div><p id="meet-results-stale" class="notice" ${dirty ? '' : 'hidden'}>아래는 이전 입력값으로 계산한 결과입니다. 위에서 다시 계산해 주세요.</p><p class="muted">가장 먼 사람의 거리 → 거리 차이 → 평균거리 순으로 정렬합니다. 실제 교통편과 강·도로·환승은 반영하지 않으므로 지도에서 경로를 확인해 주세요.</p>${center ? `<p class="muted">참고 중심점 ${center.lat.toFixed(4)}, ${center.lng.toFixed(4)} · <a href="${e(mapUrl(center))}" target="_blank" rel="noopener noreferrer">지도에서 좌표 보기 ↗</a>${center.method === 'medoid' ? '<br>출발지가 지구 반대편에 있어 중심점이 유일하지 않습니다. 출발지 중 대표점을 표시했습니다.' : ''}</p>` : ''}<div class="stack">${results.map(resultCard).join('') || '<p class="empty">출발지와 후보를 입력한 뒤 계산해 주세요.</p>'}</div>${results.length ? `<div class="meet-actions"><button class="btn btn-primary" data-meet-action="create-room">선택한 후보로 모임 만들기</button><span class="muted" id="meet-selection-count">${selected.size}곳 선택 · 최대 5곳</span></div><p class="muted">가상 예시 여부와 좌표를 모임 후보에 표시합니다. 모임방에서는 투표를 체험할 수 있어요.</p>` : ''}</section>
     </div>`;
+    if(hosted){
+      const resetButton=root.querySelector('[data-meet-action="reset"]');
+      resetButton.textContent='가상 서울 예시로 체험';
+      const compareCopy=[...root.querySelectorAll('p.muted')].find(p=>p.textContent.startsWith('이 미리보기는'));
+      if(compareCopy)compareCopy.textContent='가져오거나 입력한 후보끼리만 비교합니다. 전체 지역의 최적 장소나 맛집 순위를 뜻하지 않습니다.';
+    }
   }
 
   function markDirty() {
@@ -133,6 +139,7 @@ export function mountMeet(root) {
     const record = input.dataset.origin ? origins.find(item => item.id === input.dataset.origin) : candidates.find(item => item.id === input.dataset.candidate);
     if (!record) return;
     record[key] = input.value;
+    if(input.dataset.candidate && record.source === 'search') record.source = 'manual';
     if (key === 'station') {
       const station = stations[Number(input.value)];
       if (input.value !== 'manual' && station) Object.assign(record, station);
@@ -215,7 +222,7 @@ export function mountMeet(root) {
       const roomCandidates = chosen.map(place => ({
         id: place.id,
         name: place.demo && !place.name.startsWith('예시') ? `[가상 예시] ${place.name}` : place.name,
-        address: `${place.demo ? '[실제 식당 아님] ' : ''}${place.address || '직접 입력한 장소'} · 좌표 ${place.lat.toFixed(4)}, ${place.lng.toFixed(4)} · 가장 먼 참여자 직선 ${km(place.maximumKm)}`,
+        address: `${place.demo ? '[실제 식당 아님] ' : ''}${place.address || '직접 입력한 장소'} · 좌표 ${place.lat.toFixed(4)}, ${place.lng.toFixed(4)}`,
         menu: place.menu || '메뉴 미입력',
       }));
       window.dispatchEvent(new CustomEvent('preview:create-room', { detail: { candidates: roomCandidates } }));
@@ -225,7 +232,8 @@ export function mountMeet(root) {
   root.addEventListener('input', onInput);
   root.addEventListener('change', onChange);
   root.addEventListener('click', onClick);
-  calculate(); render();
+  if(!hosted)calculate();
+  render();
   return () => {
     disposed = true;
     root.removeEventListener('input', onInput);

@@ -1,4 +1,4 @@
-import { api, escapeHtml as esc, notify } from './shared.js';
+import { api, escapeHtml as esc, notify, hostedTools } from './shared.js';
 import { CURRENCIES, SAMPLE_MENU, normalizeMenu, planOrder, calculateOrder, formatMoney, makeOrderCard, validPrice } from './menu-core.js';
 import { MAX_MENU_PHOTOS, MAX_MENU_ITEMS, mergeMenuPages } from './menu-pages.js';
 import { validatePhotoSelection, appendUniquePhotos } from './menu-photo-list.js';
@@ -29,7 +29,7 @@ export async function mountMenu(root) {
           </label>
           <label class="menu-upload field"><span>카메라로 한 장 촬영</span><input type="file" id="menu-camera" accept="image/*" capture="environment" ${state.busy || state.photos.length >= MAX_MENU_PHOTOS ? 'disabled' : ''}><small class="muted">한 장씩 촬영해 목록에 추가할 수 있어요. HEIC는 이 브라우저가 지원할 때 변환합니다.</small></label>
           ${state.photos.length ? `<div class="menu-photo-grid">${state.photos.map((photo,index)=>`<figure class="menu-photo-preview"><div class="menu-photo-heading"><span class="badge">사진 ${index+1}</span><button class="btn btn-quiet" data-action="remove-photo" data-id="${esc(photo.id)}" aria-label="사진 ${index+1} 삭제">삭제</button></div><button class="menu-photo-enlarge" data-action="view-photo" data-id="${esc(photo.id)}" aria-label="사진 ${index+1} 크게 보기"><img src="${esc(photo.image)}" alt="메뉴판 사진 ${index+1}: ${esc(photo.name)}"></button><figcaption class="muted">${esc(photo.name)}<br>원본 ${(photo.originalBytes/1024/1024).toFixed(2)}MB → 전송 ${(photo.bytes/1024/1024).toFixed(2)}MB${photo.warning ? `<br>${esc(photo.warning)}` : ''}</figcaption></figure>`).join('')}</div><p class="muted">최적화 후 총 ${(state.photos.reduce((sum,photo)=>sum+photo.bytes,0)/1024/1024).toFixed(2)}MB · 사진을 눌러 글씨를 확인해 주세요. 빽빽한 메뉴는 구역별로 나눠 찍으면 좋아요. 사진 추가·삭제 시 이전 메뉴 결과는 초기화됩니다.</p>` : '<div class="empty menu-photo-placeholder"><span aria-hidden="true">▤</span><strong>메뉴판이 여러 페이지여도 괜찮아요</strong><span>사진을 한 번에 고르거나, 나눠서 추가해 주세요.</span></div>'}
-          <div class="notice${!state.configured && !state.checking ? ' warning' : ''}">${state.checking ? '사진 분석 연결 상태 확인 중…' : state.configured ? '전체 분석을 누르면 선택한 사진 모두가 Claude API로 한 번에 전송됩니다. 사진은 이 미리보기 서버에 파일로 저장하지 않습니다. 사진이 많을수록 분석 비용이 늘어날 수 있어요.' : '사진 선택·추가·삭제는 체험할 수 있지만, 실제 AI 분석은 아직 연결하지 않았어요. 아래 예시 메뉴로 중복 정리와 가격 확인 흐름을 볼 수 있어요.'}</div>
+          <div class="notice${!state.configured && !state.checking ? ' warning' : ''}">${state.checking ? '사진 분석 연결 상태 확인 중…' : state.configured ? `전체 분석을 누르면 선택한 사진 모두가 Claude API로 한 번에 전송됩니다. 앱에는 사진을 저장하지 않습니다.${hostedTools() ? ` 비용 보호를 위해 앱 전체 월 ${esc(state.monthlyLimit || 20)}회까지 분석합니다. 기존 검색 API 비용과는 별도입니다.` : ' 사진이 많을수록 분석 비용이 늘어날 수 있어요.'}` : esc(state.connectionMessage || '사진 선택·추가·삭제는 체험할 수 있지만, 실제 AI 분석은 아직 연결하지 않았어요. 아래 예시 메뉴로 중복 정리와 가격 확인 흐름을 볼 수 있어요.')}</div>
           ${state.configured ? `<button class="btn btn-primary" data-action="analyze" ${!state.photos.length || state.busy ? 'disabled' : ''}>${state.busy ? state.readingPhotos ? '사진 준비 중…' : '전체 메뉴를 읽고 있어요…' : `사진 ${state.photos.length}장 전체 분석 · Claude로 전송`}</button>` : ''}
           <div class="row"><button class="btn btn-quiet" data-action="sample" ${state.busy ? 'disabled' : ''}>예시 메뉴로 체험</button><button class="btn btn-quiet" data-action="sample-pages" ${state.busy ? 'disabled' : ''}>여러 페이지 예시</button><button class="btn btn-quiet" data-action="manual" ${state.busy ? 'disabled' : ''}>직접 입력하기</button>${state.photos.length ? '<button class="btn btn-quiet" data-action="clear-photos">사진 전체 지우기</button>' : ''}</div>
         </section>
@@ -181,7 +181,7 @@ export async function mountMenu(root) {
     }
   });
   render();
-  try { const status=await api('/status');state.configured=status.menuVisionConfigured===true; } catch {state.configured=false;}
+  try { const status=await api('/status');state.configured=status.menuVisionConfigured===true;state.monthlyLimit=status.menuMonthlyLimit;state.connectionMessage=hostedTools()&&!state.configured?'사진 분석 연결이 준비되지 않았습니다. 예시 메뉴 또는 직접 입력을 이용해 주세요.':''; } catch(error) {state.configured=false;state.connectionMessage=error.status===401?'접근 코드가 필요합니다. 맛집 검색 화면에서 먼저 접근 코드를 입력한 후 이 화면을 다시 열어 주세요.':hostedTools()?'사진 분석 연결을 확인하지 못했습니다. 잠시 후 새로고침하거나 직접 입력을 이용해 주세요.':'';}
   finally {state.checking=false;render();}
   return () => {alive=false;};
 }

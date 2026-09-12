@@ -28,11 +28,12 @@ export function validateMenuImages(body) {
   });
 }
 
-export async function parseMenuPhoto(body, { apiKey, model = 'claude-haiku-4-5', fetchImpl = fetch } = {}) {
+export async function parseMenuPhoto(body, { apiKey, model = 'claude-haiku-4-5', fetchImpl = fetch, onUsage, timeoutMs = 35000 } = {}) {
   const images = validateMenuImages(body);
   if (!apiKey) fail('이 로컬 미리 보기에는 사진 분석 API가 연결되지 않았습니다. 예시 메뉴 또는 직접 입력으로 체험해 주세요.', 503);
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 35000);
+  const timeout=Number.isFinite(timeoutMs)?Math.max(1000,Math.min(35000,Math.floor(timeoutMs))):35000;
+  const timer = setTimeout(() => controller.abort(), timeout);
   try {
     const response = await fetchImpl('https://api.anthropic.com/v1/messages', {
       method: 'POST', signal: controller.signal,
@@ -50,6 +51,10 @@ export async function parseMenuPhoto(body, { apiKey, model = 'claude-haiku-4-5',
     });
     if (!response.ok) fail('사진 분석 요청을 처리하지 못했습니다. 잠시 후 다시 시도하거나 직접 입력해 주세요.', 502);
     const result = await response.json();
+    // Server-only observation; tokens are recorded even if the paid model output is later rejected.
+    if(typeof onUsage==='function'&&result.usage) {
+      try { await onUsage(result.usage); } catch { /* Statistics failure must not turn successful OCR into a retry. */ }
+    }
     if (result.stop_reason !== 'end_turn') fail('사진 분석 결과가 완성되지 않았습니다. 메뉴판을 더 좁게 찍어 다시 시도해 주세요.', 502);
     const text = (Array.isArray(result.content) ? result.content : []).filter(b => b.type === 'text').map(b => b.text).join('');
     let parsed;
