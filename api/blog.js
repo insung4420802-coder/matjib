@@ -1,7 +1,7 @@
 // 네이버 블로그 검색 프록시 — 원시 후기를 넉넉히 반환 (광고 판정은 judge.js가 담당)
 // Vercel 환경변수: NAVER_CLIENT_ID, NAVER_CLIENT_SECRET
 
-import { guardAccess, cleanText, fetchWithTimeout } from "./lib/guard.js";
+import { guardAccess, cleanText, fetchWithTimeout } from "./lib/_guard.js";
 
 function stripTags(s) {
   return (s || "")

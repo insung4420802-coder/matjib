@@ -813,6 +813,12 @@
     </div>
   </header>
 
+  <nav class="filter-bar" aria-label="함께 쓰는 도구" style="margin:0 0 18px;flex-wrap:wrap">
+    <a class="action-chip" href="/tools/?feature=rooms" target="_blank" rel="noopener">🙋 우리 뭐 먹지?</a>
+    <a class="action-chip" href="/tools/?feature=menu" target="_blank" rel="noopener">📷 메뉴판 찰칵</a>
+    <a class="action-chip" href="/tools/?feature=meet" target="_blank" rel="noopener">📍 중간 지점 비교</a>
+  </nav>
+
   <div id="setupWarn" class="setup-warn">
     아직 카카오 JavaScript 키가 설정되지 않았어요. <b>index.html 상단</b>의
     <code>KAKAO_JS_KEY</code>에 키를 넣고 다시 배포해 주세요.
@@ -924,6 +930,7 @@
 import { normIdentity, reviewMatchesPlace } from './review-identity.js';
 import { relevanceForPlace, acceptedReviews, evidenceSources, evidenceConflict, compareRecommendations } from './search-quality.js';
 import { rescoreWithRelevance } from './ranking.js';
+import { createHandoff } from './preview/v22/handoff.js';
 "use strict";
 
 /* ───────── 상태 ───────── */
@@ -3630,6 +3637,23 @@ async function loadHoursBadge(p, target) {
 }
 
 /* ───────── v12 후보 비교·목록 공유 ───────── */
+function toolCandidateLink(target, places, label) {
+  const link = document.createElement('a');
+  link.className = 'action-chip'; link.textContent = label;
+  link.href = `/tools/?feature=${target}`; link.target = '_blank'; link.rel = 'noopener';
+  link.addEventListener('click', event => {
+    try {
+      const handoff = createHandoff(places, {mode: searchMode, target});
+      link.href = `/tools/?feature=${target}&handoff=${encodeURIComponent(handoff.id)}`;
+    } catch(error) {
+      event.preventDefault();
+      els.locStatus.textContent = error.message || '후보를 전달하지 못했습니다. 잠시 후 다시 시도해 주세요.';
+      els.locStatus.className = 'loc-status err';
+    }
+  });
+  return link;
+}
+
 function getComparePlaces() {
   return [...compareIds].map((id) => lastResults.find((p) => String(p.id) === id)).filter(Boolean);
 }
@@ -3751,7 +3775,7 @@ function openCompareModal() {
   share.addEventListener("click", () => shareCandidateList(places, share));
   const close = document.createElement("button"); close.type = "button"; close.textContent = "닫기";
   close.addEventListener("click", () => { els.pcOverlay.hidden = true; });
-  actions.append(share, close);
+  actions.append(share, toolCandidateLink('rooms', places, '🙋 이 후보로 모임 만들기'), toolCandidateLink('meet', places, '📍 이 후보의 거리 비교'), close);
   els.pcEmbed.append(grid, actions);
 }
 
@@ -4058,6 +4082,8 @@ function renderResults() {
     shareCandidateList(selected.length ? selected : filtered.slice(0, 3), shareListBtn);
   });
   bar.appendChild(shareListBtn);
+  bar.appendChild(toolCandidateLink('rooms', filtered.slice(0,3), '🙋 위 후보로 모임 만들기'));
+  bar.appendChild(toolCandidateLink('meet', filtered.slice(0,50), '📍 현재 결과의 거리 비교'));
   if (hiddenCount) {
     const restoreButton = document.createElement("button");
     restoreButton.className = "action-chip";

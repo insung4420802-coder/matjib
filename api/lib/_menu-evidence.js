@@ -1,4 +1,4 @@
-import { cleanText, fetchWithTimeout } from "./guard.js";
+import { cleanText, fetchWithTimeout } from "./_guard.js";
 import { normalize, positiveMention } from "../../search-quality.js";
 
 export const EVIDENCE_LIMITS = Object.freeze({

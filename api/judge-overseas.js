@@ -2,8 +2,8 @@
 // 입력(POST): { places:[{ id, rating, ratingCount, rawRelevanceScore, reviews:[{title,description,date}] }], maxRelevanceScore }
 // 출력: { results:[{ id, stars, score100, googleRating, googleRatingCount, breakdown, realCount, realReviews, adCount }] }
 
-import { evaluateOverseasPlace } from "./lib/score.js";
-import { guardAccess, cleanText } from "./lib/guard.js";
+import { evaluateOverseasPlace } from "./lib/_score.js";
+import { guardAccess, cleanText } from "./lib/_guard.js";
 
 function boundedNumber(value, max) {
   if (!["number", "string"].includes(typeof value) || String(value).trim() === "") return 0;

@@ -2,7 +2,7 @@
 // 입력(POST): { name, address, menu }
 // 출력: { phrases:[{ko, local, roman}] } (실패 시 phrases:null)
 
-import { guardAccess, cleanText, fetchWithTimeout } from "./lib/guard.js";
+import { guardAccess, cleanText, fetchWithTimeout } from "./lib/_guard.js";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "POST만 지원합니다." });

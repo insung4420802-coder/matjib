@@ -1,6 +1,6 @@
 // 후기 요약의 관찰 가능한 신호만 평가한다. Haiku는 메뉴 근거 검토에 사용한다.
-import { evaluatePlace, filterReviewsForPlace } from "./lib/score.js";
-import { guardAccess, cleanText } from "./lib/guard.js";
+import { evaluatePlace, filterReviewsForPlace } from "./lib/_score.js";
+import { guardAccess, cleanText } from "./lib/_guard.js";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "POST만 지원합니다." });

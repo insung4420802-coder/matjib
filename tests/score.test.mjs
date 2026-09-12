@@ -9,7 +9,7 @@ import {
   reviewMatchesPlace,
   reviewSatisfaction,
   relevanceScore,
-} from "../api/lib/score.js";
+} from "../api/lib/_score.js";
 import { combine, combineOverseas, toStars, rescoreWithRelevance } from "../ranking.js";
 
 const NOW = new Date("2026-07-14T00:00:00Z").getTime();

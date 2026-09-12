@@ -5,7 +5,7 @@
 // 출력: { places: [{ id, name, address, lat, lng, rating, ratingCount, category,
 //                    mapUrl, businessStatus, reviews:[{author,text,textKo,rating,time,url,publishTime}] }] }
 
-import { guardAccess, cleanText, fetchWithTimeout } from "./lib/guard.js";
+import { guardAccess, cleanText, fetchWithTimeout } from "./lib/_guard.js";
 
 const FIELDS = [
   "places.id", "places.displayName", "places.formattedAddress",
