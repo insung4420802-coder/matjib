@@ -1,4 +1,4 @@
-// 공통 API 보호 도구. APP_ACCESS_KEY는 선택 사항이며, 설정하면 지인에게만
+// 공통 API 보호 도구 (Vercel 함수 생성 제외). APP_ACCESS_KEY는 선택 사항이며, 설정하면 지인에게만
 // 공유하는 간단한 접근 코드로 API 비용의 무단 사용을 줄일 수 있다.
 
 function guardAccess(req, res) {
