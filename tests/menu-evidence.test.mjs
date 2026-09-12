@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import handler from "../api/menu-evidence.js";
-import { EVIDENCE_LIMITS, sanitizeEvidenceInput, buildEvidenceRequest, validateEvidenceResponse, runMenuEvidence } from "../api/lib/menu-evidence.js";
+import { EVIDENCE_LIMITS, sanitizeEvidenceInput, buildEvidenceRequest, validateEvidenceResponse, runMenuEvidence } from "../api/lib/_menu-evidence.js";
 
 const source = { id: "blog-1", title: "A식당 방문", text: "오징어짬뽕을 먹었는데 국물이 얼큰했어요. 다만 간이 조금 짰어요.", url: "https://blog.naver.com/review/123", date: "20260101", kind: "blog" };
 const request = () => ({ query: "오징어 들어간 얼큰한 짬뽕", menu: "오징어짬뽕", constraints: ["얼큰한 국물"], mode: "domestic", places: [{ id: "a", name: "A식당", sources: [{ ...source }] }] });
