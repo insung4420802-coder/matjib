@@ -2,7 +2,7 @@
 // 입력(POST): { name, reviews:[{title,description}] }
 // 출력: { summary } (키 없거나 실패 시 summary:null — 앱은 계속 동작)
 
-import { guardAccess, cleanText, fetchWithTimeout } from "./lib/guard.js";
+import { guardAccess, cleanText, fetchWithTimeout } from "./lib/_guard.js";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "POST만 지원합니다." });
