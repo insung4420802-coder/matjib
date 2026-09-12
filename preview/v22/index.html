@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="color-scheme" content="light">
+  <title>임슐랭 가이드 · 다음 한 끼 연구실</title>
+  <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="./menu.css">
+</head>
+<body>
+  <div class="preview-strip"><span class="status-dot"></span> 비공개 로컬 미리보기 <span class="strip-divider">/</span> 운영 사이트에 반영되지 않습니다</div>
+  <div class="app-wrap">
+    <header class="app-header">
+      <a class="brand" href="/">임슐랭 가이드<span>.</span></a>
+      <span class="version">V22 · EXPERIMENTS</span>
+    </header>
+    <main>
+      <section class="intro">
+        <div class="eyebrow">검색 다음의 즐거움</div>
+        <h1>다음 한 끼, <span>함께 정해요.</span></h1>
+        <p>어디서 만날지부터 무엇을 주문할지까지.<br class="mobile-break"> 세 가지 새 도구를 먼저 경험해 보세요.</p>
+      </section>
+      <nav class="feature-tabs" aria-label="새 기능 선택">
+        <button id="tab-rooms" class="feature-tab active" aria-controls="pane-rooms" aria-pressed="true" data-tab="rooms"><span class="tab-number">01</span><span>우리 뭐 먹지?<small>모임방 · 함께 결정</small></span></button>
+        <button id="tab-menu" class="feature-tab" aria-controls="pane-menu" aria-pressed="false" data-tab="menu"><span class="tab-number">02</span><span>메뉴판 찰칵<small>예산 맞춤 주문</small></span></button>
+        <button id="tab-meet" class="feature-tab" aria-controls="pane-meet" aria-pressed="false" data-tab="meet"><span class="tab-number">03</span><span>어디서 만날까?<small>모두의 중간 지점</small></span></button>
+      </nav>
+      <section id="pane-rooms" class="feature-pane" aria-labelledby="tab-rooms"></section>
+      <section id="pane-menu" class="feature-pane" aria-labelledby="tab-menu" hidden></section>
+      <section id="pane-meet" class="feature-pane" aria-labelledby="tab-meet" hidden></section>
+      <section class="preview-footnote">
+        <h2>이번 미리보기의 범위</h2>
+        <p>모임방은 이 컴퓨터에서 여러 탭으로 함께 테스트할 수 있습니다. 외부 친구에게 보내는 공개 링크는 아직 제공하지 않습니다. 메뉴판 AI는 서버 키 연결 전까지 예시·직접 입력으로 체험하며, 중간 지점은 이동시간이 아닌 직선거리로 계산합니다.</p>
+        <p>예시 식당·메뉴는 기능 확인용 가상 자료입니다. 기존 검색·즐겨찾기·운영 데이터는 변경하지 않습니다.</p>
+      </section>
+    </main>
+    <footer>임슐랭 가이드 <span>조금 더 즐거운 한 끼를 위한 실험</span></footer>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
