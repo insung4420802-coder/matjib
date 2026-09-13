@@ -6,7 +6,7 @@ import {MENU_ANALYSIS_TIMEOUT_MS} from '../preview/v22/menu-analysis-policy.js';
 
 const png='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC';
 const env={ANTHROPIC_API_KEY:'mock-anthropic-key',KV_REST_API_URL:'https://example.upstash.io',KV_REST_API_TOKEN:'mock-redis-token',VERCEL:'1'};
-const parsed={currency:'JPY',items:[{id:'one',name:'소바',localName:'そば',price:850,category:'main',spicy:null}],warnings:[]};
+const parsed={currency:'JPY',items:[{id:'one',name:'메밀국수',localName:'そば',price:850,category:'main',spicy:null,description:'메밀로 만든 일본식 국수',descriptionSource:'general'}],warnings:[]};
 function req(body={images:[png]},method='POST',extraHeaders={}){return {method,body,headers:{host:'matjib.test',origin:'https://matjib.test','content-type':'application/json','x-vercel-forwarded-for':'192.0.2.1',...extraHeaders},socket:{remoteAddress:'127.0.0.1'}};}
 function res(){return {headers:{},statusCode:200,body:null,setHeader(k,v){this.headers[k.toLowerCase()]=v;},status(code){this.statusCode=code;return this;},json(body){this.body=body;return this;}};}
 function harness(options={}){
@@ -21,12 +21,12 @@ test('status reveals capability and monthly policy without using Redis or AI',as
   const h=harness();const response=await run(h,req(undefined,'GET'));
   assert.equal(response.statusCode,200);assert.equal(response.body.menuVisionConfigured,true);assert.equal(response.body.menuMonthlyLimit,20);assert.equal(h.commands.length,0);assert.equal(h.parseCalls,0);
   assert.equal(JSON.stringify(response.body).includes('mock-redis-token'),false);
-  assert.equal(response.body.menuAnalysisVersion,23);assert.equal(response.body.menuAnalysisTimeoutSeconds,120);
+  assert.equal(response.body.menuAnalysisVersion,24);assert.equal(response.body.menuMeaningEnabled,true);assert.equal(response.body.menuAnalysisTimeoutSeconds,120);
 });
 test('four valid photos still reserve only one analysis with longer model deadline',async()=>{
   const h=harness();const response=await run(h,req({images:[png,png,png,png]}));
   assert.equal(response.statusCode,200);assert.equal(h.parseCalls,1);assert.equal(response.body.quota.remaining,19);
-  assert.equal(response.headers['x-menu-analysis-version'],'23');
+  assert.equal(response.headers['x-menu-analysis-version'],'24');
   assert.deepEqual(Object.keys(h.events[0]).sort(),['durationMs','phase','photoCount','status','version']);
   assert.equal(h.events[0].photoCount,4);assert.equal(h.events[0].phase,'complete');
   assert.equal(JSON.stringify(h.events).includes('mock-'),false);
@@ -43,6 +43,7 @@ test('expired preparation deadline stops before monthly reservation or paid work
 });
 test('valid request reserves quota then performs exactly one paid call and records usage',async()=>{
   const h=harness();const response=await run(h);
+  assert.equal(response.body.items[0].description,'메밀로 만든 일본식 국수');assert.equal(response.body.items[0].descriptionSource,'general');
   assert.equal(response.statusCode,200);assert.equal(h.parseCalls,1);assert.equal(response.body.quota.remaining,19);assert.equal(response.body.quota.limit,20);
   assert.ok(h.commands[0][1].includes('tools-rate-v1'));assert.ok(h.commands[1][1].includes('menu-reserve-v1'));assert.ok(h.commands[2][1].includes('menu-usage-v1'));
   assert.equal(h.commands[0][3].includes('192.0.2.1'),false);assert.ok(response.headers['cache-control'].includes('no-store'));
