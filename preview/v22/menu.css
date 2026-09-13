@@ -30,6 +30,13 @@
 .menu-item-details { display:grid;grid-template-columns:1fr .8fr 1.1fr;gap:10px; }
 .menu-item .menu-compact-price { color:#2d563b;white-space:nowrap;font-size:.92rem; }
 .menu-compact-meta { display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.3rem .75rem;color:#6e766b;font-size:.74rem; }
+.menu-meaning { display:flex;flex-direction:column;align-items:flex-start;gap:.5rem;padding:.8rem .9rem;border:1px solid #e4e9df;border-radius:12px;background:#f5f8f0;overflow-wrap:anywhere; }
+.menu-meaning p { margin:0;font-size:.9rem;line-height:1.7;color:#344536; }
+.menu-meaning .menu-meaning-source { max-width:100%;white-space:normal;font-size:.68rem;line-height:1.45; }
+.menu-meaning small { font-size:.74rem;line-height:1.55; }
+.menu-meaning-unknown { background:#f7f7f3;border-color:#e7e7de; }
+.menu-meaning-unknown p { color:#72766b;font-size:.82rem; }
+.menu-meaning-guide { margin:0;font-size:.82rem;line-height:1.7; }
 .menu-edit-details { border-top:1px solid #e7e8df;padding-top:.5rem; }
 .menu-edit-details summary { cursor:pointer;font-size:.77rem;font-weight:650;color:#49664b; }
 .menu-edit-fields { display:flex;flex-direction:column;gap:.75rem;padding-top:.85rem; }
