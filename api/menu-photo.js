@@ -4,7 +4,7 @@ import { assertSameOrigin, readToolsJson, setPrivateHeaders, clientFingerprint, 
 import { menuMonthlyLimit, reserveMenuQuota, recordMenuUsage } from '../server-lib/menu-quota.js';
 import { parseMenuPhoto, validateMenuImages } from '../preview/v22/menu-api.mjs';
 import { photoHeaderSize, MAX_PHOTO_REQUEST_BYTES } from '../preview/v22/menu-photo-optimize.js';
-import { MENU_ANALYSIS_TIMEOUT_MS, MENU_HANDLER_DEADLINE_MS } from '../preview/v22/menu-analysis-policy.js';
+import { MENU_ANALYSIS_TIMEOUT_MS, MENU_HANDLER_DEADLINE_MS, MENU_ANALYSIS_VERSION } from '../preview/v22/menu-analysis-policy.js';
 
 const fail=(message,status=503,code='MENU_PHOTO_UNAVAILABLE')=>{throw Object.assign(new Error(message),{status,code});};
 
@@ -34,15 +34,15 @@ export function createMenuPhotoHandler({env=process.env,createRedis=createRedisC
     const started=clock();let photoCount=0;let phase='validation';
     const record=status=>{
       // Never log photos, menu text, tokens, IP addresses or API keys.
-      try {logEvent({version:23,status,phase,photoCount,durationMs:Math.max(0,clock()-started)});} catch {}
+      try {logEvent({version:MENU_ANALYSIS_VERSION,status,phase,photoCount,durationMs:Math.max(0,clock()-started)});} catch {}
     };
     setPrivateHeaders(res);
-    res.setHeader('X-Menu-Analysis-Version','23');
+    res.setHeader('X-Menu-Analysis-Version',String(MENU_ANALYSIS_VERSION));
     try {
       if(req.method==='GET') {
         let config;
         try {config=configuration(env);} catch {config={limit:0,enabled:false,storage:redisConfigured(env)};}
-        return res.status(200).json({menuVisionConfigured:config.enabled,storageConfigured:config.storage,accessKeyRequired:Boolean(env.APP_ACCESS_KEY),menuMonthlyLimit:config.limit,menuAnalysisVersion:23,menuAnalysisTimeoutSeconds:MENU_ANALYSIS_TIMEOUT_MS/1000,quotaScope:'project-shared-production-and-preview',quotaTimezone:'UTC'});
+        return res.status(200).json({menuVisionConfigured:config.enabled,storageConfigured:config.storage,accessKeyRequired:Boolean(env.APP_ACCESS_KEY),menuMonthlyLimit:config.limit,menuAnalysisVersion:MENU_ANALYSIS_VERSION,menuMeaningEnabled:true,menuAnalysisTimeoutSeconds:MENU_ANALYSIS_TIMEOUT_MS/1000,quotaScope:'project-shared-production-and-preview',quotaTimezone:'UTC'});
       }
       if(req.method!=='POST') {res.setHeader('Allow','GET, POST');fail('GET 또는 POST만 지원합니다.',405,'METHOD_NOT_ALLOWED');}
       assertSameOrigin(req);
