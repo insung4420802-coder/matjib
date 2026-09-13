@@ -80,7 +80,7 @@ test('four photos and sixty explained items still use one Haiku call with 6000-t
   let calls=0;const pages=Array.from({length:4},(_,p)=>page(p+1,Array.from({length:15},(_,i)=>[`달걀말이 ${p+1}-${i+1}`,`だし巻き卵 ${p+1}-${i+1}`,850,'s',null,description,'g'])));
   const result=await parseMenuPhoto({images:Array(4).fill(png)},{apiKey:'test',fetchImpl:async(url,options)=>{
     calls++;const payload=JSON.parse(options.body);assert.equal(payload.model,'claude-haiku-4-5');assert.equal(payload.max_tokens,6000);assert.equal(payload.max_tokens,MENU_MAX_OUTPUT_TOKENS);assert.equal(payload.messages[0].content.filter(b=>b.type==='image').length,4);
-    assert.match(payload.system,/exactly seven entries/);assert.match(payload.system,/NOT merely phonetic transliteration/);assert.match(payload.system,/at most 40/);assert.match(payload.system,/NOT a fact about this restaurant/);assert.match(payload.system,/Never certify allergen safety/);assert.match(payload.system,/20 purchasable items per page and 60 total/);return response(pages);
+    assert.match(payload.system,/정확히 7개 값의 배열/);assert.match(payload.system,/낱개로 직역하거나 소리만 음차하지/);assert.match(payload.system,/최대 40자/);assert.match(payload.system,/이 업장에 대한 사실이 아닙니다/);assert.match(payload.system,/알레르기 안전을 보장하지/);assert.match(payload.system,/페이지별 최대 20개, 전체 최대 60개/);return response(pages);
   }});
   assert.equal(calls,1);assert.equal(result.items.length,60);assert.ok(result.items.every(item=>item.description===description&&item.descriptionSource==='general'));
   for(let p=1;p<=4;p++)assert.equal(result.items.filter(item=>item.sourcePages.includes(p)).length,15);
@@ -90,4 +90,25 @@ test('four photos and sixty explained items still use one Haiku call with 6000-t
 test('unknown descriptions do not prevent complete parsing and no extra AI call is made',async()=>{
   let calls=0;const result=await parseMenuPhoto({images:[png]},{apiKey:'test',fetchImpl:async()=>{calls++;return response([page(1,[[...five,'이름이 불확실함','u'],[...five.slice(0,2),900,'s',null,42,'p']])]);}});
   assert.equal(calls,1);assert.equal(result.items.length,1);assert.equal(result.items[0].descriptionSource,'unknown');assert.equal(result.items[0].description,'');assert.equal(result.items[0].priceConflict,true);
+});
+
+test('Korean culinary prompt separates reading and meaning and repeats conservative final checks',async()=>{
+  let calls=0;await parseMenuPhoto({images:[png]},{apiKey:'test',fetchImpl:async(url,options)=>{
+    calls++;const payload=JSON.parse(options.body);const system=payload.system;
+    assert.equal(payload.temperature,0);assert.equal(payload.max_tokens,6000);
+    assert.match(system,/한국어 원어민.*다국어 메뉴 통역사/);
+    assert.match(system,/원문 판독과 음식 의미 해석을 구분/);
+    assert.match(system,/사진에 인쇄된 설명을 일반 상식보다 우선/);
+    assert.match(system,/일반 조리 상식이 하나라도 포함되면 p가 아닌 g/);
+    assert.match(system,/원문을 그대로 유지하고 description="", source=u, 분류=u/);
+    assert.match(system,/모르는 식재료·동물종·부위·조리법은 추측하거나 쉬운 이름에 덧붙이지/);
+    assert.match(system,/출력 직전에 내부 점검/);assert.match(system,/점검 과정은 출력하지/);
+    assert.match(system,/お好み焼き → 일본식 부침개/);assert.match(system,/店主の秘密プレート/);
+    assert.doesNotMatch(system,/白子ポン酢|もんじゃ焼き|あん肝|つくね|せせり|手羽先|とろろご飯|ひつまぶし|ししゃも|なめろう/);
+    const finalInstruction=payload.messages[0].content.at(-1).text;
+    assert.match(finalInstruction,/원문·가격과/);assert.match(finalInstruction,/실제 음식 의미/);
+    assert.match(finalInstruction,/이름은 원문 그대로·설명은 빈 문자열·source=u·분류=u/);
+    assert.match(finalInstruction,/마지막 의미·근거 점검/);
+    return response([page(1)]);
+  }});assert.equal(calls,1);
 });
