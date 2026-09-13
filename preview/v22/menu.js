@@ -3,11 +3,22 @@ import { CURRENCIES, SAMPLE_MENU, normalizeMenu, planOrder, calculateOrder, form
 import { MAX_MENU_PHOTOS, MAX_MENU_ITEMS, mergeMenuPages } from './menu-pages.js';
 import { validatePhotoSelection, appendUniquePhotos } from './menu-photo-list.js';
 import { optimizeMenuPhoto, validatePhotoRequest } from './menu-photo-optimize.js';
+import { menuAnalysisProgress } from './menu-analysis-policy.js';
 
 export async function mountMenu(root) {
   const state = { items: [], currency: 'JPY', people: 3, budget: 4000, avoidSpicy: false, confirmed: false,
-    photos: [], sample: false, busy: false, readingPhotos: false, photoProgress: '', configured: false, checking: true, warnings: [], error: '', quantities: null, planWarnings: [], expanded: new Set() };
-  let alive = true;
+    photos: [], sample: false, busy: false, readingPhotos: false, photoProgress: '', analyzing: false, analysisStartedAt: 0, analysisError: '', configured: false, checking: true, warnings: [], error: '', quantities: null, planWarnings: [], expanded: new Set() };
+  let alive = true, analysisTimer = null;
+  const stopAnalysisProgress = () => { if (analysisTimer !== null) clearInterval(analysisTimer); analysisTimer = null; };
+  const updateAnalysisProgress = () => {
+    if (!alive || !state.analyzing) { stopAnalysisProgress(); return; }
+    const elapsedMs = Math.max(0, Date.now() - state.analysisStartedAt);
+    const elapsed = root.querySelector('#menu-analysis-elapsed');
+    const message = root.querySelector('#menu-analysis-message');
+    if (elapsed) elapsed.textContent = `${Math.floor(elapsedMs / 1000)}초`;
+    const nextMessage = menuAnalysisProgress(elapsedMs, state.photos.length);
+    if (message && message.textContent !== nextMessage) message.textContent = nextMessage;
+  };
   const options = (values, selected) => values.map(([value, label]) => `<option value="${esc(value)}"${String(value) === String(selected) ? ' selected' : ''}>${esc(label)}</option>`).join('');
   const render = () => {
     if (!alive) return;
@@ -31,6 +42,8 @@ export async function mountMenu(root) {
           ${state.photos.length ? `<div class="menu-photo-grid">${state.photos.map((photo,index)=>`<figure class="menu-photo-preview"><div class="menu-photo-heading"><span class="badge">사진 ${index+1}</span><button class="btn btn-quiet" data-action="remove-photo" data-id="${esc(photo.id)}" aria-label="사진 ${index+1} 삭제">삭제</button></div><button class="menu-photo-enlarge" data-action="view-photo" data-id="${esc(photo.id)}" aria-label="사진 ${index+1} 크게 보기"><img src="${esc(photo.image)}" alt="메뉴판 사진 ${index+1}: ${esc(photo.name)}"></button><figcaption class="muted">${esc(photo.name)}<br>원본 ${(photo.originalBytes/1024/1024).toFixed(2)}MB → 전송 ${(photo.bytes/1024/1024).toFixed(2)}MB${photo.warning ? `<br>${esc(photo.warning)}` : ''}</figcaption></figure>`).join('')}</div><p class="muted">최적화 후 총 ${(state.photos.reduce((sum,photo)=>sum+photo.bytes,0)/1024/1024).toFixed(2)}MB · 사진을 눌러 글씨를 확인해 주세요. 빽빽한 메뉴는 구역별로 나눠 찍으면 좋아요. 사진 추가·삭제 시 이전 메뉴 결과는 초기화됩니다.</p>` : '<div class="empty menu-photo-placeholder"><span aria-hidden="true">▤</span><strong>메뉴판이 여러 페이지여도 괜찮아요</strong><span>사진을 한 번에 고르거나, 나눠서 추가해 주세요.</span></div>'}
           <div class="notice${!state.configured && !state.checking ? ' warning' : ''}">${state.checking ? '사진 분석 연결 상태 확인 중…' : state.configured ? `전체 분석을 누르면 선택한 사진 모두가 Claude API로 한 번에 전송됩니다. 앱에는 사진을 저장하지 않습니다.${hostedTools() ? ` 비용 보호를 위해 앱 전체 월 ${esc(state.monthlyLimit || 20)}회까지 분석합니다. 기존 검색 API 비용과는 별도입니다.` : ' 사진이 많을수록 분석 비용이 늘어날 수 있어요.'}` : esc(state.connectionMessage || '사진 선택·추가·삭제는 체험할 수 있지만, 실제 AI 분석은 아직 연결하지 않았어요. 아래 예시 메뉴로 중복 정리와 가격 확인 흐름을 볼 수 있어요.')}</div>
           ${state.configured ? `<button class="btn btn-primary" data-action="analyze" ${!state.photos.length || state.busy ? 'disabled' : ''}>${state.busy ? state.readingPhotos ? '사진 준비 중…' : '전체 메뉴를 읽고 있어요…' : `사진 ${state.photos.length}장 전체 분석 · Claude로 전송`}</button>` : ''}
+          ${state.analyzing ? `<div class="notice stack" id="menu-analysis-status" aria-busy="true"><strong>메뉴판 분석 중 · <span id="menu-analysis-elapsed" aria-live="off">${Math.floor(Math.max(0,Date.now()-state.analysisStartedAt)/1000)}초</span></strong><p id="menu-analysis-message" role="status" aria-live="polite">${esc(menuAnalysisProgress(Math.max(0,Date.now()-state.analysisStartedAt),state.photos.length))}</p><small class="muted">사진이 여러 장이면 약 2분까지 걸릴 수 있어요. 결과를 받을 때까지 같은 탭을 유지하고, 새로고침하거나 분석 버튼을 다시 누르지 말아 주세요. 완료 비율이 아닌 대기 시간 안내입니다.</small></div>` : ''}
+          ${state.analysisError ? `<div class="notice error" id="menu-analysis-error" role="alert">${esc(state.analysisError)}<p>사진은 그대로 남아 있어요. 자동으로 다시 분석하지 않았습니다.</p></div>` : ''}
           <div class="row"><button class="btn btn-quiet" data-action="sample" ${state.busy ? 'disabled' : ''}>예시 메뉴로 체험</button><button class="btn btn-quiet" data-action="sample-pages" ${state.busy ? 'disabled' : ''}>여러 페이지 예시</button><button class="btn btn-quiet" data-action="manual" ${state.busy ? 'disabled' : ''}>직접 입력하기</button>${state.photos.length ? '<button class="btn btn-quiet" data-action="clear-photos">사진 전체 지우기</button>' : ''}</div>
         </section>
         <section class="panel stack">
@@ -83,7 +96,7 @@ export async function mountMenu(root) {
     `;
     if(state.busy) root.querySelectorAll('input,select,button[data-action]').forEach(control=>{control.disabled=true;});
   };
-  const invalidate = () => { state.confirmed = false; state.quantities = null; state.error = ''; };
+  const invalidate = () => { state.confirmed = false; state.quantities = null; state.error = ''; state.analysisError = ''; };
   const invalidatePhotoResults = () => {
     state.items=[]; state.sample=false; state.warnings=[]; state.expanded=new Set(); state.planWarnings=[]; invalidate();
   };
@@ -99,10 +112,11 @@ export async function mountMenu(root) {
     if(detail.open) state.expanded.add(detail.dataset.editId); else state.expanded.delete(detail.dataset.editId);
   }, true);
   root.addEventListener('change', async event => {
-    if(state.busy) return;
+    if(!alive || state.busy) return;
     const target = event.target;
     if (target.id === 'menu-photo' || target.id === 'menu-camera') {
       const files = Array.from(target.files || []); if (!files.length) return;
+      state.analysisError='';
       try { validatePhotoSelection(state.photos, files); } catch(error) {state.error=error.message;render();return;}
       state.busy=true;state.readingPhotos=true;state.error='';render();
       try {
@@ -134,9 +148,9 @@ export async function mountMenu(root) {
     else if(target.id==='menu-confirm') {state.confirmed=target.checked;if(!state.confirmed)state.quantities=null;render();}
   });
   root.addEventListener('click', async event => {
-    const button=event.target.closest('[data-action]'); if(!button||button.disabled||state.busy)return;
+    const button=event.target.closest('[data-action]'); if(!alive||!button||button.disabled||state.busy)return;
     const action=button.dataset.action;
-    if(action==='sample') {const sample=normalizeMenu(structuredClone(SAMPLE_MENU));Object.assign(state,sample,{sample:true,confirmed:false,quantities:null,budget:4000,error:'',expanded:new Set()});render();}
+    if(action==='sample') {const sample=normalizeMenu(structuredClone(SAMPLE_MENU));Object.assign(state,sample,{sample:true,confirmed:false,quantities:null,budget:4000,error:'',analysisError:'',expanded:new Set()});render();}
     else if(action==='sample-pages') {
       const source=structuredClone(SAMPLE_MENU);
       const sample=normalizeMenu(mergeMenuPages([
@@ -145,7 +159,7 @@ export async function mountMenu(root) {
         {page:3,currency:'JPY',items:source.items.slice(4)},
       ],{expectedPageCount:3}));
       sample.warnings.unshift('가상의 3페이지 메뉴입니다. 선택한 사진을 읽은 결과가 아닙니다. 자루 소바는 중복을 합치고, 새우튀김 소바의 서로 다른 가격은 확인을 요청합니다.');
-      Object.assign(state,sample,{sample:true,confirmed:false,quantities:null,budget:4000,error:'',expanded:new Set()});render();
+      Object.assign(state,sample,{sample:true,confirmed:false,quantities:null,budget:4000,error:'',analysisError:'',expanded:new Set()});render();
     }
     else if(action==='manual') {Object.assign(state,{items:[],sample:false,warnings:[],currency:'JPY',expanded:new Set()});addItem();render();}
     else if(action==='add') {if(state.items.length<MAX_MENU_ITEMS)addItem();render();}
@@ -165,10 +179,21 @@ export async function mountMenu(root) {
     }
     else if(action==='analyze') {
       if(!state.configured||!state.photos.length||state.busy)return;
-      state.busy=true;state.error='';render();
-      try {const result=normalizeMenu(await api('/menu-parse',{method:'POST',body:validatePhotoRequest(state.photos.map(photo=>photo.image))}));if(!result.items.length)throw new Error('읽을 수 있는 메뉴가 없습니다.');Object.assign(state,result,{sample:false,confirmed:false,quantities:null,expanded:new Set()});notify('읽힌 메뉴를 합쳤어요. 누락 안내와 출처 사진·가격을 확인해 주세요.');}
-      catch(error){state.error=error.message||'사진을 분석하지 못했습니다.';}
-      finally{state.busy=false;render();}
+      state.busy=true;state.error='';state.analysisError='';state.analyzing=true;state.analysisStartedAt=Date.now();render();
+      stopAnalysisProgress();analysisTimer=setInterval(updateAnalysisProgress,1000);
+      try {
+        const response=await api('/menu-parse',{method:'POST',body:validatePhotoRequest(state.photos.map(photo=>photo.image))});
+        if(!alive)return;
+        const result=normalizeMenu(response);
+        if(!result.items.length)throw new Error('읽을 수 있는 메뉴가 없습니다.');
+        Object.assign(state,result,{sample:false,confirmed:false,quantities:null,expanded:new Set()});
+        notify('읽힌 메뉴를 합쳤어요. 누락 안내와 출처 사진·가격을 확인해 주세요.');
+      }
+      catch(error){if(alive)state.analysisError=error.message||'사진을 분석하지 못했습니다.';}
+      finally{
+        stopAnalysisProgress();state.analyzing=false;state.busy=false;render();
+        if(alive&&state.analysisError)root.querySelector('#menu-analysis-error')?.scrollIntoView({behavior:'smooth',block:'nearest'});
+      }
     } else if(action==='plan') {
       if(!state.confirmed)return;
       const result=planOrder(state);state.error=result.error||'';state.planWarnings=result.warnings||[];state.quantities=result.quantities||null;render();
@@ -183,5 +208,5 @@ export async function mountMenu(root) {
   render();
   try { const status=await api('/status');state.configured=status.menuVisionConfigured===true;state.monthlyLimit=status.menuMonthlyLimit;state.connectionMessage=hostedTools()&&!state.configured?'사진 분석 연결이 준비되지 않았습니다. 예시 메뉴 또는 직접 입력을 이용해 주세요.':''; } catch(error) {state.configured=false;state.connectionMessage=error.status===401?'접근 코드가 필요합니다. 맛집 검색 화면에서 먼저 접근 코드를 입력한 후 이 화면을 다시 열어 주세요.':hostedTools()?'사진 분석 연결을 확인하지 못했습니다. 잠시 후 새로고침하거나 직접 입력을 이용해 주세요.':'';}
   finally {state.checking=false;render();}
-  return () => {alive=false;};
+  return () => {alive=false;stopAnalysisProgress();};
 }
