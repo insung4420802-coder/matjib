@@ -1,6 +1,6 @@
 {
   "functions": {
-    "api/menu-photo.js": { "maxDuration": 60 },
+    "api/menu-photo.js": { "maxDuration": 150 },
     "api/rooms.js": { "maxDuration": 30 }
   },
   "headers": [

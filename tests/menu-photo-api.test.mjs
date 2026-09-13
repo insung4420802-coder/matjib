@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createMenuPhotoHandler,validateProductionMenuPhotos} from '../api/menu-photo.js';
 import {parseMenuPhoto} from '../preview/v22/menu-api.mjs';
+import {MENU_ANALYSIS_TIMEOUT_MS} from '../preview/v22/menu-analysis-policy.js';
 
 const png='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC';
 const env={ANTHROPIC_API_KEY:'mock-anthropic-key',KV_REST_API_URL:'https://example.upstash.io',KV_REST_API_TOKEN:'mock-redis-token',VERCEL:'1'};
@@ -9,10 +10,10 @@ const parsed={currency:'JPY',items:[{id:'one',name:'소바',localName:'そば',p
 function req(body={images:[png]},method='POST',extraHeaders={}){return {method,body,headers:{host:'matjib.test',origin:'https://matjib.test','content-type':'application/json','x-vercel-forwarded-for':'192.0.2.1',...extraHeaders},socket:{remoteAddress:'127.0.0.1'}};}
 function res(){return {headers:{},statusCode:200,body:null,setHeader(k,v){this.headers[k.toLowerCase()]=v;},status(code){this.statusCode=code;return this;},json(body){this.body=body;return this;}};}
 function harness(options={}){
-  const counts=new Map();const commands=[];let parseCalls=0;
+  const counts=new Map();const commands=[];const events=[];let parseCalls=0;
   const redis={async command(command){commands.push(command);const key=command[3];if(options.redisError)throw Object.assign(new Error('저장소 연결 실패'),{status:503});if(command[1].includes('tools-rate-v1'))return options.rateDenied?[0,0,55]:[1,2,60];if(command[1].includes('menu-reserve-v1')){const count=counts.get(key)||options.initialUsed||0;if(count>=Number(command[4]))return [0,count];counts.set(key,count+1);return [1,count+1];}if(options.statsError)throw new Error('stats down');return 1;}};
-  const handler=createMenuPhotoHandler({env:{...env,...options.env},createRedis:()=>redis,accessGuard:options.accessGuard||(()=>true),now:()=>new Date('2026-09-13T00:00:00Z'),parsePhoto:async(body,config)=>{parseCalls++;config.onUsage({input_tokens:1234,output_tokens:123});if(options.parseError)throw Object.assign(new Error('분석 결과를 읽지 못했습니다.'),{status:502});assert.equal(config.model,'claude-haiku-4-5');assert.ok(config.timeoutMs<=35000);return structuredClone(parsed);}});
-  return {handler,counts,commands,get parseCalls(){return parseCalls;}};
+  const handler=createMenuPhotoHandler({env:{...env,...options.env},createRedis:()=>redis,accessGuard:options.accessGuard||(()=>true),now:()=>new Date('2026-09-13T00:00:00Z'),...(options.clock?{clock:options.clock}:{}),logEvent:event=>events.push(event),parsePhoto:async(body,config)=>{parseCalls++;config.onUsage({input_tokens:1234,output_tokens:123});if(options.parseError)throw Object.assign(new Error('분석 결과를 읽지 못했습니다.'),{status:options.parseErrorStatus||502,code:options.parseErrorCode});assert.equal(config.model,'claude-haiku-4-5');assert.ok(config.timeoutMs>35000&&config.timeoutMs<=MENU_ANALYSIS_TIMEOUT_MS);return structuredClone(parsed);}});
+  return {handler,counts,commands,events,get parseCalls(){return parseCalls;}};
 }
 async function run(harness,request=req()){const response=res();await harness.handler(request,response);return response;}
 
@@ -20,6 +21,25 @@ test('status reveals capability and monthly policy without using Redis or AI',as
   const h=harness();const response=await run(h,req(undefined,'GET'));
   assert.equal(response.statusCode,200);assert.equal(response.body.menuVisionConfigured,true);assert.equal(response.body.menuMonthlyLimit,20);assert.equal(h.commands.length,0);assert.equal(h.parseCalls,0);
   assert.equal(JSON.stringify(response.body).includes('mock-redis-token'),false);
+  assert.equal(response.body.menuAnalysisVersion,23);assert.equal(response.body.menuAnalysisTimeoutSeconds,120);
+});
+test('four valid photos still reserve only one analysis with longer model deadline',async()=>{
+  const h=harness();const response=await run(h,req({images:[png,png,png,png]}));
+  assert.equal(response.statusCode,200);assert.equal(h.parseCalls,1);assert.equal(response.body.quota.remaining,19);
+  assert.equal(response.headers['x-menu-analysis-version'],'23');
+  assert.deepEqual(Object.keys(h.events[0]).sort(),['durationMs','phase','photoCount','status','version']);
+  assert.equal(h.events[0].photoCount,4);assert.equal(h.events[0].phase,'complete');
+  assert.equal(JSON.stringify(h.events).includes('mock-'),false);
+});
+test('model timeout has a specific code and cannot trigger an automatic paid retry',async()=>{
+  const h=harness({parseError:true,parseErrorStatus:504,parseErrorCode:'MENU_ANALYSIS_TIMEOUT'});const response=await run(h);
+  assert.equal(response.statusCode,504);assert.equal(response.body.code,'MENU_ANALYSIS_TIMEOUT');assert.equal(h.parseCalls,1);
+  assert.equal([...h.counts.values()][0],1);assert.equal(h.events[0].phase,'analysis');
+});
+test('expired preparation deadline stops before monthly reservation or paid work',async()=>{
+  let calls=0;const h=harness({clock:()=>calls++===0?0:116000});const response=await run(h);
+  assert.equal(response.statusCode,504);assert.equal(response.body.code,'MENU_PREPARATION_TIMEOUT');
+  assert.equal(h.parseCalls,0);assert.equal(h.counts.size,0);assert.equal(h.commands.length,1);
 });
 test('valid request reserves quota then performs exactly one paid call and records usage',async()=>{
   const h=harness();const response=await run(h);

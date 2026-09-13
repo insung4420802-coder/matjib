@@ -1,3 +1,5 @@
+import { MENU_CLIENT_TIMEOUT_MS } from './menu-analysis-policy.js';
+
 export function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
@@ -16,8 +18,9 @@ export function apiUrl(path, hosted = hostedTools()) {
 }
 
 export async function api(path, options = {}) {
+  const isMenuAnalysis = path === '/menu-parse';
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 45000);
+  const timer = setTimeout(() => controller.abort(), isMenuAnalysis ? MENU_CLIENT_TIMEOUT_MS : 45000);
   try {
     const { body, headers, ...rest } = options;
     let accessKey = '';
@@ -30,15 +33,31 @@ export async function api(path, options = {}) {
       credentials: 'same-origin',
     });
     let result;
-    try { result = await response.json(); } catch { throw new Error('서버 응답을 읽지 못했습니다. 잠시 후 다시 시도해 주세요.'); }
+    try { result = await response.json(); } catch (parseError) {
+      if (parseError.name === 'AbortError') throw parseError;
+      const error = new Error(isMenuAnalysis && response.status === 504
+        ? '서버가 사진 분석 응답을 기다리다 연결을 종료했습니다. 선택한 사진은 그대로 유지됩니다. 자동 재시도는 하지 않았어요. 필요하면 사진을 1~2장씩 나눠 다시 분석해 주세요.'
+        : '서버 응답을 읽지 못했습니다. 잠시 후 다시 시도해 주세요.');
+      error.status = response.status || 502;
+      error.code = isMenuAnalysis && response.status === 504 ? 'MENU_ANALYSIS_TIMEOUT' : 'SERVER_RESPONSE_INVALID';
+      throw error;
+    }
     if (!response.ok) {
-      const error = new Error(result.error || '요청을 처리하지 못했습니다.');
+      const error = new Error(typeof result?.error === 'string' && result.error ? result.error : '요청을 처리하지 못했습니다.');
       error.status = response.status;
+      if (typeof result?.code === 'string' && /^[A-Z0-9_]{1,80}$/.test(result.code)) error.code = result.code;
       throw error;
     }
     return result;
   } catch (error) {
-    if (error.name === 'AbortError') throw new Error('응답이 늦어지고 있습니다. 잠시 후 다시 시도해 주세요.');
+    if (error.name === 'AbortError' || controller.signal.aborted) {
+      const timeoutError = new Error(isMenuAnalysis
+        ? '사진 분석 응답을 기다리는 시간이 초과되었습니다. 서버의 처리 완료 여부를 확인할 수 없어 자동 재시도하지 않았어요. 선택한 사진은 유지되며, 필요하면 사진을 1~2장씩 나눠 다시 분석해 주세요.'
+        : '응답이 늦어지고 있습니다. 잠시 후 다시 시도해 주세요.');
+      timeoutError.status = 408;
+      timeoutError.code = isMenuAnalysis ? 'MENU_CLIENT_TIMEOUT' : 'REQUEST_TIMEOUT';
+      throw timeoutError;
+    }
     throw error;
   } finally { clearTimeout(timer); }
 }
