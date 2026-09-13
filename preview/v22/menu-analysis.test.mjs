@@ -29,6 +29,7 @@ test('legacy object responses remain compatible',async()=>{
 test('four photos with sixty compact items use one Haiku call and unchanged output ceiling',async()=>{
   let calls=0;const pages=Array.from({length:4},(_,p)=>page(p+1,Array.from({length:15},(_,i)=>[`메뉴 ${p+1}-${i+1}`,`Dish ${p+1}-${i+1}`,i+1,'m',null]),'USD'));
   const result=await parseMenuPhoto({images:Array(4).fill(png)},{apiKey:'test',fetchImpl:async(url,options)=>{
+    assert.ok(JSON.parse(options.body).messages[0].content.some(block=>block.type==='text'&&block.text.includes('NOT dessert')));
     calls++;const payload=JSON.parse(options.body);assert.equal(payload.model,'claude-haiku-4-5');assert.equal(payload.max_tokens,MENU_MAX_OUTPUT_TOKENS);assert.equal(payload.max_tokens,6000);assert.equal(payload.messages[0].content.filter(b=>b.type==='image').length,4);assert.match(payload.system,/exactly five entries/);return response(pages);
   }});
   assert.equal(calls,1);assert.equal(result.items.length,60);for(let p=1;p<=4;p++)assert.equal(result.items.filter(item=>item.sourcePages.includes(p)).length,15);
