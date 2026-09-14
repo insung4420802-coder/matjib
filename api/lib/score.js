@@ -1,4 +1,3 @@
-// Underscore prefix keeps this helper out of Vercel's function count.
 import { reviewMatchesPlace } from "../../review-identity.js";
 import { combine, combineOverseas, toStars } from "../../ranking.js";
 
