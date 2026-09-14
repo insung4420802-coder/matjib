@@ -77,14 +77,15 @@ test('60-item cap includes all pages round-robin and discloses truncation',()=>{
   const oversized=mergeMenuPages([page(1,Array.from({length:21},(_,i)=>item({localName:`Dish ${i}`})))]);assert.equal(oversized.items.length,20);assert.ok(oversized.warnings.some(w=>w.includes('20개')));
 });
 
-test('five images use exactly one bounded Haiku call with numbered image blocks',async()=>{
+test('five images use one numbered OCR call followed by bounded text-only interpretation',async()=>{
   let calls=0;const result=await parseMenuPhoto({images:Array(5).fill(png)},{apiKey:'test',fetchImpl:async(url,options)=>{
     calls++;assert.equal(url,'https://api.anthropic.com/v1/messages');const payload=JSON.parse(options.body);
-    assert.equal(payload.model,'claude-haiku-4-5');assert.equal(payload.max_tokens,6000);
+    assert.equal(payload.model,'claude-haiku-4-5');assert.equal(payload.max_tokens,3000);
+    if(calls===2){assert.equal(payload.messages[0].content.filter(b=>b.type==='image').length,0);return response({items:[]});}
     const blocks=payload.messages[0].content;assert.equal(blocks.filter(b=>b.type==='image').length,5);assert.equal(blocks[0].type,'image');
     for(let p=1;p<=5;p++)assert.ok(blocks.some(b=>b.type==='text'&&b.text.includes(`page=${p}`)));
     return response({pages:Array.from({length:5},(_,i)=>page(i+1))});
-  }});assert.equal(calls,1);assert.equal(result.items.length,1);assert.deepEqual(result.items[0].sourcePages,[1,2,3,4,5]);
+  }});assert.equal(calls,2);assert.equal(result.items.length,1);assert.deepEqual(result.items[0].sourcePages,[1,2,3,4,5]);
 });
 
 test('new images requests reject flat responses; legacy single image preserves compatibility',async()=>{

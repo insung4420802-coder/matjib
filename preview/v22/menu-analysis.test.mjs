@@ -1,12 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {parseMenuPhoto,expandMenuTuples} from './menu-api.mjs';
-import {MENU_ANALYSIS_TIMEOUT_MS,MENU_MAX_OUTPUT_TOKENS} from './menu-analysis-policy.js';
+import {MENU_ANALYSIS_TIMEOUT_MS,MENU_MAX_OUTPUT_TOKENS,MENU_OCR_OUTPUT_TOKENS,MENU_MEANING_OUTPUT_TOKENS} from './menu-analysis-policy.js';
 
 const png='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC';
 const tuple=['소바','そば',850,'m',null];
 const page=(pageNumber,items=[tuple],currency='JPY')=>({page:pageNumber,currency,items,warnings:[]});
 const response=pages=>({ok:true,json:async()=>({stop_reason:'end_turn',content:[{type:'text',text:JSON.stringify({pages})}]})});
+const meaningResponse=payload=>({ok:true,json:async()=>({stop_reason:'end_turn',content:[{type:'text',text:JSON.stringify({items:JSON.parse(payload.messages[0].content[0].text).items.map(item=>[item.id,'음식 이름','음식의 일반적인 설명','g'])})}]})});
 
 test('compact tuples expand to the existing public schema without changing unknowns',()=>{
   const [result]=expandMenuTuples([page(1)]);
@@ -26,13 +27,17 @@ test('legacy object responses remain compatible',async()=>{
   assert.equal(result.items[0].price,850);assert.deepEqual(result.items[0].sourcePages,[1]);
 });
 
-test('four photos with sixty compact items use one Haiku call and unchanged output ceiling',async()=>{
+test('four photos with sixty compact items use two stages within the total output ceiling',async()=>{
   let calls=0;const pages=Array.from({length:4},(_,p)=>page(p+1,Array.from({length:15},(_,i)=>[`메뉴 ${p+1}-${i+1}`,`Dish ${p+1}-${i+1}`,i+1,'m',null]),'USD'));
   const result=await parseMenuPhoto({images:Array(4).fill(png)},{apiKey:'test',fetchImpl:async(url,options)=>{
-    assert.ok(JSON.parse(options.body).messages[0].content.some(block=>block.type==='text'&&block.text.includes('d는 액체 음료만, 디저트는 s')));
-    calls++;const payload=JSON.parse(options.body);assert.equal(payload.model,'claude-haiku-4-5');assert.equal(payload.max_tokens,MENU_MAX_OUTPUT_TOKENS);assert.equal(payload.max_tokens,6000);assert.equal(payload.messages[0].content.filter(b=>b.type==='image').length,4);assert.match(payload.system,/정확히 7개 값의 배열/);return response(pages);
+    calls++;const payload=JSON.parse(options.body);assert.equal(payload.model,'claude-haiku-4-5');
+    assert.equal(payload.max_tokens,calls===1?MENU_OCR_OUTPUT_TOKENS:MENU_MEANING_OUTPUT_TOKENS);
+    assert.equal(payload.messages[0].content.filter(b=>b.type==='image').length,calls===1?4:0);
+    if(calls===2)return meaningResponse(payload);
+    assert.ok(payload.messages[0].content.some(block=>block.type==='text'&&block.text.includes('d는 액체 음료만, 디저트는 s')));
+    assert.match(payload.system,/정확히 5개 값/);return response(pages);
   }});
-  assert.equal(calls,1);assert.equal(result.items.length,60);for(let p=1;p<=4;p++)assert.equal(result.items.filter(item=>item.sourcePages.includes(p)).length,15);
+  assert.equal(calls,2);assert.equal(MENU_OCR_OUTPUT_TOKENS+MENU_MEANING_OUTPUT_TOKENS,MENU_MAX_OUTPUT_TOKENS);assert.equal(MENU_MAX_OUTPUT_TOKENS,6000);assert.equal(result.items.length,60);for(let p=1;p<=4;p++)assert.equal(result.items.filter(item=>item.sourcePages.includes(p)).length,15);
 });
 
 test('compact duplicate prices, unknown prices and currencies stay conservative',async()=>{
@@ -46,13 +51,26 @@ test('compact output still validates page provenance and warns on missing pages'
   const partial=await parseMenuPhoto({images:[png,png]},{apiKey:'test',fetchImpl:async()=>response([page(1)])});assert.deepEqual(partial.items[0].sourcePages,[1]);assert.ok(partial.warnings.some(w=>w.includes('2번 사진')));
 });
 
-test('analysis can pass the old 35-second cutoff and complete without another call',async t=>{
+test('OCR can pass the old 35-second cutoff before the one text interpretation call',async t=>{
   t.mock.timers.enable({apis:['setTimeout']});let calls=0;let aborted=false;
   const pending=parseMenuPhoto({images:[png]},{apiKey:'test',fetchImpl:async(url,options)=>{
-    calls++;return new Promise((resolve,reject)=>{setTimeout(()=>resolve(response([page(1)])),40000);options.signal.addEventListener('abort',()=>{aborted=true;reject(new DOMException('aborted','AbortError'));});});
+    calls++;if(calls===2)return meaningResponse(JSON.parse(options.body));return new Promise((resolve,reject)=>{setTimeout(()=>resolve(response([page(1)])),40000);options.signal.addEventListener('abort',()=>{aborted=true;reject(new DOMException('aborted','AbortError'));});});
   }});
   t.mock.timers.tick(35001);assert.equal(aborted,false);t.mock.timers.tick(4999);
-  const result=await pending;assert.equal(result.items[0].price,850);assert.equal(calls,1);assert.equal(aborted,false);
+  const result=await pending;assert.equal(result.items[0].price,850);assert.equal(calls,2);assert.equal(aborted,false);
+});
+
+test('interpretation shares the OCR deadline and preserves raw results after timeout',async t=>{
+  t.mock.timers.enable({apis:['setTimeout']});let calls=0;let firstSignal;let secondSignal;let began;
+  const secondStarted=new Promise(resolve=>{began=resolve;});
+  const pending=parseMenuPhoto({images:[png]},{apiKey:'test',fetchImpl:async(url,options)=>{
+    calls++;
+    if(calls===1){firstSignal=options.signal;return new Promise(resolve=>setTimeout(()=>resolve(response([page(1)])),80000));}
+    secondSignal=options.signal;began();return new Promise((resolve,reject)=>options.signal.addEventListener('abort',()=>reject(new DOMException('aborted','AbortError'))));
+  }});
+  t.mock.timers.tick(80000);await secondStarted;assert.equal(firstSignal,secondSignal);
+  t.mock.timers.tick(39999);assert.equal(secondSignal.aborted,false);t.mock.timers.tick(1);
+  const result=await pending;assert.equal(calls,2);assert.equal(result.items[0].localName,'そば');assert.equal(result.items[0].name,'そば');assert.equal(result.items[0].price,850);assert.equal(result.items[0].descriptionSource,'unknown');assert.ok(result.warnings.some(w=>w.includes('뜻 풀이를 완료하지 못해')));
 });
 
 test('analysis aborts at 120 seconds with a specific code and photo-preservation guidance',async t=>{

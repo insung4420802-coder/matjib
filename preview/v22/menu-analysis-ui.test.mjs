@@ -27,3 +27,13 @@ test('analysis errors are displayed immediately beside the analyze control',()=>
   assert.ok(analyzeButton<errorBlock&&errorBlock<examples);
   assert.match(source,/menu-analysis-error'\)\?\.scrollIntoView/);
 });
+test('photo and camera choosers stay disabled until connection-status rendering is finished',()=>{
+  for(const id of ['menu-photo','menu-camera']){
+    const input=source.match(new RegExp(`<input[^>]*id="${id}"[^>]*>`))?.[0];
+    assert.ok(input,`${id} exists`);
+    assert.match(input,/state\.checking \|\| state\.busy/);
+  }
+  assert.match(source,/확인이 끝나면 사진을 선택할 수 있어요/);
+  assert.match(source,/if \(target\.id === 'menu-photo' \|\| target\.id === 'menu-camera'\) \{\s*if\(state\.checking\)return;/);
+  assert.match(source,/finally \{state\.checking=false;render\(\);\}/);
+});

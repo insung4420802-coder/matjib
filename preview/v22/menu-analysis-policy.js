@@ -1,9 +1,11 @@
 // Keep the model deadline inside the handler, hosting and browser deadlines.
-// Longer waiting does not add model calls or increase the output-token budget.
+// OCR and text-only interpretation share one deadline and one total output budget.
 export const MENU_ANALYSIS_TIMEOUT_MS = 120_000;
 export const MENU_HANDLER_DEADLINE_MS = 130_000;
 export const MENU_CLIENT_TIMEOUT_MS = 165_000;
 export const MENU_MAX_OUTPUT_TOKENS = 6_000;
+export const MENU_OCR_OUTPUT_TOKENS = 3_000;
+export const MENU_MEANING_OUTPUT_TOKENS = MENU_MAX_OUTPUT_TOKENS - MENU_OCR_OUTPUT_TOKENS;
 export const MENU_ANALYSIS_VERSION = 24;
 
 export function menuAnalysisProgress(elapsedMs, photoCount) {
