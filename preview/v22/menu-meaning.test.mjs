@@ -9,6 +9,7 @@ const png='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAA
 const five=['육수를 넣은 달걀말이','だし巻き卵',850,'s',null];
 const description='육수를 섞은 달걀을 말아 익힌 음식';
 const seven=[...five,description,'g'];
+const unlisted=['추측 번역','店主の秘密料理',850,'s',null];
 const page=(number,items=[seven])=>({page:number,currency:'JPY',items,warnings:[]});
 const response=pages=>({ok:true,json:async()=>({stop_reason:'end_turn',content:[{type:'text',text:JSON.stringify({pages})}]})});
 const object=(text=description,source='general')=>({name:five[0],localName:five[1],price:850,category:'side',spicy:null,description:text,descriptionSource:source});
@@ -93,10 +94,10 @@ test('four photos and sixty explained items use two Haiku stages with a combined
 
 test('legacy OCR and unknown interpretation retain raw names and unresolved prices without retry',async()=>{
   let calls=0;const result=await parseMenuPhoto({images:[png]},{apiKey:'test',fetchImpl:async()=>{
-    calls++;if(calls===1)return response([page(1,[[...five,'혼합된 잘못된 설명','g'],[...five.slice(0,2),900,'s',null,42,'p']])]);
+    calls++;if(calls===1)return response([page(1,[[...unlisted,'혼합된 잘못된 설명','g'],[...unlisted.slice(0,2),900,'s',null,42,'p']])]);
     return {ok:true,json:async()=>({stop_reason:'end_turn',content:[{type:'text',text:JSON.stringify({items:[['menu-1','추측 이름','이름이 불확실함','u']]})}]})};
   }});
-  assert.equal(calls,2);assert.equal(result.items.length,1);assert.equal(result.items[0].name,five[1]);assert.equal(result.items[0].category,'unknown');assert.equal(result.items[0].descriptionSource,'unknown');assert.equal(result.items[0].description,'');assert.equal(result.items[0].priceConflict,true);
+  assert.equal(calls,2);assert.equal(result.items.length,1);assert.equal(result.items[0].name,unlisted[1]);assert.equal(result.items[0].category,'unknown');assert.equal(result.items[0].descriptionSource,'unknown');assert.equal(result.items[0].description,'');assert.equal(result.items[0].priceConflict,true);
 });
 
 test('separate OCR and Korean meaning prompts do not mix tasks or send image data twice',async()=>{
@@ -137,15 +138,15 @@ test('bad optional descriptions degrade only that meaning, without corrupting OC
 test('any incomplete or unsafe second-stage mapping safely preserves OCR without retries',async()=>{
   for(const invalid of [{items:[]},{items:[['unrelated',five[0],description,'g']]},{items:[['menu-1',five[0],description,'g',1]]},{items:[{id:'menu-1',name:five[0],description,source:'g',localName:'changed'}]}]){
     let calls=0;const result=await parseMenuPhoto({images:[png]},{apiKey:'test',fetchImpl:async()=>{
-      calls++;return calls===1?response([page(1)]):{ok:true,json:async()=>({stop_reason:'end_turn',content:[{type:'text',text:JSON.stringify(invalid)}]})};
+      calls++;return calls===1?response([page(1,[unlisted])]):{ok:true,json:async()=>({stop_reason:'end_turn',content:[{type:'text',text:JSON.stringify(invalid)}]})};
     }});
-    assert.equal(calls,2);assert.equal(result.items[0].name,five[1]);assert.equal(result.items[0].localName,five[1]);assert.equal(result.items[0].price,850);assert.equal(result.items[0].description,'');assert.equal(result.items[0].descriptionSource,'unknown');assert.equal(result.items[0].category,'unknown');assert.deepEqual(result.items[0].sourcePages,[1]);assert.match(result.warnings.join(' '),/한국어 뜻 풀이를 완료하지 못해/);
+    assert.equal(calls,2);assert.equal(result.items[0].name,unlisted[1]);assert.equal(result.items[0].localName,unlisted[1]);assert.equal(result.items[0].price,850);assert.equal(result.items[0].description,'');assert.equal(result.items[0].descriptionSource,'unknown');assert.equal(result.items[0].category,'unknown');assert.deepEqual(result.items[0].sourcePages,[1]);assert.match(result.warnings.join(' '),/한국어 뜻 풀이를 완료하지 못해/);
   }
 });
 
 test('paid usage from both stages is allowlisted, summed and observed exactly once even on second failure',async()=>{
   let calls=0;const observed=[];const result=await parseMenuPhoto({images:[png]},{apiKey:'test',onUsage:value=>observed.push(value),fetchImpl:async()=>{
-    calls++;if(calls===1){const first=response([page(1)]);return {ok:true,json:async()=>({...await first.json(),usage:{input_tokens:1200,output_tokens:900,cache_read_input_tokens:10,private_data:'ignore'}})};}
+    calls++;if(calls===1){const first=response([page(1,[unlisted])]);return {ok:true,json:async()=>({...await first.json(),usage:{input_tokens:1200,output_tokens:900,cache_read_input_tokens:10,private_data:'ignore'}})};}
     return {ok:true,json:async()=>({stop_reason:'max_tokens',usage:{input_tokens:600,output_tokens:3000,cache_creation_input_tokens:20,private_data:'ignore'},content:[]})};
   }});
   assert.equal(calls,2);assert.equal(result.items[0].price,850);assert.equal(result.items[0].descriptionSource,'unknown');

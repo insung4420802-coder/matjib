@@ -1,5 +1,6 @@
 import { MAX_MENU_PHOTOS, MAX_PHOTO_BYTES, MAX_TOTAL_PHOTO_BYTES, mergeMenuPages, normalizeMenuDescription, normalizedMenuName } from './menu-pages.js';
 import { MENU_ANALYSIS_TIMEOUT_MS, MENU_OCR_OUTPUT_TOKENS, MENU_MEANING_OUTPUT_TOKENS } from './menu-analysis-policy.js';
+import { applyMenuReferences } from './menu-reference-meaning.js';
 
 function fail(message, status = 400, code) { const error = new Error(message); error.status = status; if(code)error.code=code; throw error; }
 export function validateMenuImage(body) {
@@ -188,10 +189,10 @@ export async function parseMenuPhoto(body, { apiKey, model = 'claude-haiku-4-5',
       interpreted=applyMenuMeanings(normalized,meanings);
     } catch {
       interpreted=rawMenuFallback(normalized);
-      interpreted.warnings.unshift('한국어 뜻 풀이를 완료하지 못해 읽은 원문과 가격만 표시합니다. 메뉴 뜻과 분류를 직접 확인해 주세요. 자동 재시도하지 않습니다.');
+      interpreted.warnings.unshift('한국어 뜻 풀이를 완료하지 못해 원문과 가격을 보존했습니다. 일부 일본 요리는 일반 용어 설명만 표시하며, 그 밖의 메뉴 뜻과 분류는 직접 확인해 주세요. 자동 재시도하지 않습니다.');
     }
     interpreted.warnings.unshift('AI가 읽은 메뉴명·통화·가격을 원본과 비교한 뒤 확인해 주세요. 현재 가격이나 알레르기 안전을 보장하지 않습니다.');
-    return interpreted;
+    return applyMenuReferences(interpreted);
   } catch (error) {
     if (error.name === 'AbortError') fail('사진 분석 시간이 초과되었습니다. 선택한 사진은 그대로 유지됩니다. 자동 재시도하지 않으며, 메뉴를 직접 입력하거나 사진 수를 줄여 다시 시도할 수 있습니다.', 504, 'MENU_ANALYSIS_TIMEOUT');
     if (error.status) throw error;
