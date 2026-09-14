@@ -1,14 +1,16 @@
+import { normalizeMenuDescription } from './menu-pages.js';
+
 export const CURRENCIES = ['JPY', 'KRW', 'USD', 'VND', 'THB', 'SGD', 'EUR', 'GBP', 'MYR', 'IDR'];
 const ZERO_DECIMALS = new Set(['JPY', 'KRW', 'VND']);
 export const SAMPLE_MENU = {
   currency: 'JPY',
   items: [
-    { id: 'sample-1', name: '자루 소바', localName: 'ざるそば', price: 850, category: 'main', spicy: false },
-    { id: 'sample-2', name: '새우튀김 소바', localName: '海老天そば', price: 1250, category: 'main', spicy: false },
-    { id: 'sample-3', name: '매운 카레 우동', localName: '辛口カレーうどん', price: 1100, category: 'main', spicy: true },
-    { id: 'sample-4', name: '닭튀김', localName: '唐揚げ', price: 550, category: 'side', spicy: false },
-    { id: 'sample-5', name: '풋콩', localName: '枝豆', price: 300, category: 'side', spicy: false },
-    { id: 'sample-6', name: '우롱차', localName: 'ウーロン茶', price: 250, category: 'drink', spicy: false },
+    { id: 'sample-1', name: '차가운 메밀국수', localName: 'ざるそば', price: 850, category: 'main', spicy: false, description: '찬 메밀국수를 간장 소스에 찍어 먹는 음식', descriptionSource: 'general' },
+    { id: 'sample-2', name: '새우튀김 메밀국수', localName: '海老天そば', price: 1250, category: 'main', spicy: false, description: '메밀국수에 새우튀김을 곁들인 음식', descriptionSource: 'general' },
+    { id: 'sample-3', name: '매운 카레 우동', localName: '辛口カレーうどん', price: 1100, category: 'main', spicy: true, description: '카레 국물에 굵은 밀가루 면을 넣은 음식', descriptionSource: 'general' },
+    { id: 'sample-4', name: '닭튀김', localName: '唐揚げ', price: 550, category: 'side', spicy: false, description: '양념한 닭고기에 튀김옷을 입혀 튀긴 음식', descriptionSource: 'general' },
+    { id: 'sample-5', name: '풋콩', localName: '枝豆', price: 300, category: 'side', spicy: false, description: '덜 익은 콩을 꼬투리째 삶아 먹는 곁들임', descriptionSource: 'general' },
+    { id: 'sample-6', name: '우롱차', localName: 'ウーロン茶', price: 250, category: 'drink', spicy: false, description: '찻잎을 일부 산화시켜 우려낸 차', descriptionSource: 'general' },
   ],
   warnings: ['가상의 일본 식당 메뉴입니다. 실제 식당·가격 정보가 아닙니다.'],
 };
@@ -35,6 +37,7 @@ export function normalizeMenu(value) {
     return { id, name: name || localName, localName, price: item.priceConflict === true ? null : price,
       category: ['main', 'side', 'drink'].includes(item.category) ? item.category : 'unknown',
       spicy: typeof item.spicy === 'boolean' ? item.spicy : null,
+      ...normalizeMenuDescription(item.description, item.descriptionSource),
       sourcePages: pages(item.sourcePages), priceConflict: item.priceConflict === true, priceOptions };
   }).filter(Boolean);
   return { currency, items, warnings: (Array.isArray(value?.warnings) ? value.warnings : []).map(v => clean(v, 300)).filter(Boolean).slice(0, 15) };

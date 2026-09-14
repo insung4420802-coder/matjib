@@ -39,11 +39,12 @@ test('menu image rejects URLs, SVG, invalid bytes and large payload',()=>{
 test('unconfigured API cannot silently fake a photo extraction',async()=>{
   let called=false;await assert.rejects(parseMenuPhoto({image:png},{fetchImpl:()=>{called=true}}),e=>e.status===503);assert.equal(called,false);
 });
-test('parser uses one bounded Haiku call and preserves uncertain fields',async()=>{
+test('parser uses bounded OCR and text-only interpretation calls and preserves uncertain fields',async()=>{
   let calls=0;const result=await parseMenuPhoto({image:png},{apiKey:'test',fetchImpl:async(url,options)=>{
-    calls++;const payload=JSON.parse(options.body);assert.equal(payload.model,'claude-haiku-4-5');assert.equal(payload.max_tokens,6000);assert.equal(payload.messages[0].content.filter(b=>b.type==='image').length,1);
+    calls++;const payload=JSON.parse(options.body);assert.equal(payload.model,'claude-haiku-4-5');assert.equal(payload.max_tokens,3000);assert.equal(payload.messages[0].content.filter(b=>b.type==='image').length,calls===1?1:0);
+    if(calls===2)return {ok:true,json:async()=>({stop_reason:'end_turn',content:[{type:'text',text:'{"items":[]}' }]})};
     return {ok:true,json:async()=>({stop_reason:'end_turn',content:[{type:'text',text:JSON.stringify({currency:'JPY',items:[{name:'소바',localName:'そば',price:null,category:'main',spicy:null}],warnings:[]})}]})};
-  }});assert.equal(calls,1);assert.equal(result.items[0].price,null);assert.equal(result.items[0].spicy,null);assert.ok(result.warnings.length);
+  }});assert.equal(calls,2);assert.equal(result.items[0].price,null);assert.equal(result.items[0].spicy,null);assert.ok(result.warnings.length);
 });
 test('truncated OCR output is not used',async()=>{
   await assert.rejects(parseMenuPhoto({image:png},{apiKey:'test',fetchImpl:async()=>({ok:true,json:async()=>({stop_reason:'max_tokens',content:[]})})}),e=>e.status===502);

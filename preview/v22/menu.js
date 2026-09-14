@@ -5,6 +5,21 @@ import { validatePhotoSelection, appendUniquePhotos } from './menu-photo-list.js
 import { optimizeMenuPhoto, validatePhotoRequest } from './menu-photo-optimize.js';
 import { menuAnalysisProgress } from './menu-analysis-policy.js';
 
+export function renderMenuMeaning(item = {}) {
+  const description = typeof item.description === 'string' ? item.description.trim() : '';
+  const source = ['menu', 'general'].includes(item.descriptionSource) && description && Array.from(description).length <= 80 ? item.descriptionSource : 'unknown';
+  if (source === 'unknown') return '<div class="menu-meaning menu-meaning-unknown" data-description-source="unknown"><span class="badge menu-meaning-source">설명 확인 필요</span><p>이름만으로는 설명하기 어려워요. 직원에게 확인해 주세요.</p></div>';
+  return `<div class="menu-meaning" data-description-source="${source}"><span class="badge menu-meaning-source">${source === 'menu' ? '메뉴판 내용 풀이' : '음식 이해를 돕는 일반 설명'}</span><p>${esc(description)}</p>${source === 'general' ? '<small class="muted">이 식당의 실제 재료·조리법과 다를 수 있어요.</small>' : ''}</div>`;
+}
+
+export function invalidateMenuMeaning(item, field) {
+  if (field === 'name' || field === 'localName') {
+    item.description = '';
+    item.descriptionSource = 'unknown';
+  }
+  return item;
+}
+
 export async function mountMenu(root) {
   const state = { items: [], currency: 'JPY', people: 3, budget: 4000, avoidSpicy: false, confirmed: false,
     photos: [], sample: false, busy: false, readingPhotos: false, photoProgress: '', analyzing: false, analysisStartedAt: 0, analysisError: '', configured: false, checking: true, warnings: [], error: '', quantities: null, planWarnings: [], expanded: new Set() };
@@ -26,21 +41,21 @@ export async function mountMenu(root) {
     root.innerHTML = `
       <section class="panel menu-intro">
         <div class="eyebrow">02 · 여행 중에도, 예산 안에서</div>
-        <h2>메뉴판을 읽고,<br>우리 인원에 맞게 주문해요.</h2>
-        <p class="muted">메뉴를 확인한 뒤 인원과 예산을 입력하면 주문 조합과 현지어 메뉴 카드를 만들어요.</p>
-        <div class="row"><span class="badge">사진 → 메뉴 확인 → 주문 조합</span><span class="badge">자동 결제·예약 없음</span></div>
+        <h2>메뉴판을 쉽게 이해하고,<br>우리 인원에 맞게 주문해요.</h2>
+        <p class="muted">발음만 옮긴 이름 대신 쉬운 한국어 이름과 음식 설명을 확인해요. 인원과 예산에 맞게 고른 뒤, 직원에게는 메뉴판 원문과 수량을 보여줄 수 있어요.</p>
+        <div class="row"><span class="badge">사진 → 어떤 음식인지 확인 → 주문 조합</span><span class="badge">자동 결제·예약 없음</span></div>
       </section>
       <div class="grid-2 menu-workspace">
         <section class="panel stack">
           <div class="section-title"><h3>1. 메뉴판 가져오기</h3><span class="badge">${state.photos.length} / ${MAX_MENU_PHOTOS}장</span></div>
           <label class="menu-upload field">
             <span>${state.readingPhotos ? esc(state.photoProgress || '사진을 준비하고 있어요…') : state.photos.length ? '메뉴판 사진 추가' : '메뉴판 사진 여러 장 선택'}</span>
-            <input type="file" id="menu-photo" multiple accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif" ${state.busy || state.photos.length >= MAX_MENU_PHOTOS ? 'disabled' : ''}>
+            <input type="file" id="menu-photo" multiple accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif" ${state.checking || state.busy || state.photos.length >= MAX_MENU_PHOTOS ? 'disabled' : ''}>
             <small class="muted">최대 5장 · 원본 장당 20MB까지 자동 최적화<br>선택만으로는 전송되지 않아요.</small>
           </label>
-          <label class="menu-upload field"><span>카메라로 한 장 촬영</span><input type="file" id="menu-camera" accept="image/*" capture="environment" ${state.busy || state.photos.length >= MAX_MENU_PHOTOS ? 'disabled' : ''}><small class="muted">한 장씩 촬영해 목록에 추가할 수 있어요. HEIC는 이 브라우저가 지원할 때 변환합니다.</small></label>
+          <label class="menu-upload field"><span>카메라로 한 장 촬영</span><input type="file" id="menu-camera" accept="image/*" capture="environment" ${state.checking || state.busy || state.photos.length >= MAX_MENU_PHOTOS ? 'disabled' : ''}><small class="muted">한 장씩 촬영해 목록에 추가할 수 있어요. HEIC는 이 브라우저가 지원할 때 변환합니다.</small></label>
           ${state.photos.length ? `<div class="menu-photo-grid">${state.photos.map((photo,index)=>`<figure class="menu-photo-preview"><div class="menu-photo-heading"><span class="badge">사진 ${index+1}</span><button class="btn btn-quiet" data-action="remove-photo" data-id="${esc(photo.id)}" aria-label="사진 ${index+1} 삭제">삭제</button></div><button class="menu-photo-enlarge" data-action="view-photo" data-id="${esc(photo.id)}" aria-label="사진 ${index+1} 크게 보기"><img src="${esc(photo.image)}" alt="메뉴판 사진 ${index+1}: ${esc(photo.name)}"></button><figcaption class="muted">${esc(photo.name)}<br>원본 ${(photo.originalBytes/1024/1024).toFixed(2)}MB → 전송 ${(photo.bytes/1024/1024).toFixed(2)}MB${photo.warning ? `<br>${esc(photo.warning)}` : ''}</figcaption></figure>`).join('')}</div><p class="muted">최적화 후 총 ${(state.photos.reduce((sum,photo)=>sum+photo.bytes,0)/1024/1024).toFixed(2)}MB · 사진을 눌러 글씨를 확인해 주세요. 빽빽한 메뉴는 구역별로 나눠 찍으면 좋아요. 사진 추가·삭제 시 이전 메뉴 결과는 초기화됩니다.</p>` : '<div class="empty menu-photo-placeholder"><span aria-hidden="true">▤</span><strong>메뉴판이 여러 페이지여도 괜찮아요</strong><span>사진을 한 번에 고르거나, 나눠서 추가해 주세요.</span></div>'}
-          <div class="notice${!state.configured && !state.checking ? ' warning' : ''}">${state.checking ? '사진 분석 연결 상태 확인 중…' : state.configured ? `전체 분석을 누르면 선택한 사진 모두가 Claude API로 한 번에 전송됩니다. 앱에는 사진을 저장하지 않습니다.${hostedTools() ? ` 비용 보호를 위해 앱 전체 월 ${esc(state.monthlyLimit || 20)}회까지 분석합니다. 기존 검색 API 비용과는 별도입니다.` : ' 사진이 많을수록 분석 비용이 늘어날 수 있어요.'}` : esc(state.connectionMessage || '사진 선택·추가·삭제는 체험할 수 있지만, 실제 AI 분석은 아직 연결하지 않았어요. 아래 예시 메뉴로 중복 정리와 가격 확인 흐름을 볼 수 있어요.')}</div>
+          <div class="notice${!state.configured && !state.checking ? ' warning' : ''}">${state.checking ? '사진 분석 연결 상태 확인 중… 확인이 끝나면 사진을 선택할 수 있어요.' : state.configured ? `전체 분석을 누르면 사진을 Claude로 전송해 원문을 읽고, 읽힌 글을 한국어로 해석합니다. 두 단계 전체가 분석 1회이며 앱에는 사진을 저장하지 않습니다.${hostedTools() ? ` 비용 보호를 위해 앱 전체 월 ${esc(state.monthlyLimit || 20)}회까지 분석합니다. 기존 검색 API 비용과는 별도입니다.` : ' 사진이 많을수록 분석 비용이 늘어날 수 있어요.'}` : esc(state.connectionMessage || '사진 선택·추가·삭제는 체험할 수 있지만, 실제 AI 분석은 아직 연결하지 않았어요. 아래 예시 메뉴로 중복 정리와 가격 확인 흐름을 볼 수 있어요.')}</div>
           ${state.configured ? `<button class="btn btn-primary" data-action="analyze" ${!state.photos.length || state.busy ? 'disabled' : ''}>${state.busy ? state.readingPhotos ? '사진 준비 중…' : '전체 메뉴를 읽고 있어요…' : `사진 ${state.photos.length}장 전체 분석 · Claude로 전송`}</button>` : ''}
           ${state.analyzing ? `<div class="notice stack" id="menu-analysis-status" aria-busy="true"><strong>메뉴판 분석 중 · <span id="menu-analysis-elapsed" aria-live="off">${Math.floor(Math.max(0,Date.now()-state.analysisStartedAt)/1000)}초</span></strong><p id="menu-analysis-message" role="status" aria-live="polite">${esc(menuAnalysisProgress(Math.max(0,Date.now()-state.analysisStartedAt),state.photos.length))}</p><small class="muted">사진이 여러 장이면 약 2분까지 걸릴 수 있어요. 결과를 받을 때까지 같은 탭을 유지하고, 새로고침하거나 분석 버튼을 다시 누르지 말아 주세요. 완료 비율이 아닌 대기 시간 안내입니다.</small></div>` : ''}
           ${state.analysisError ? `<div class="notice error" id="menu-analysis-error" role="alert">${esc(state.analysisError)}<p>사진은 그대로 남아 있어요. 자동으로 다시 분석하지 않았습니다.</p></div>` : ''}
@@ -60,18 +75,21 @@ export async function mountMenu(root) {
       </div>
       ${state.error ? `<div class="notice error" role="alert">${esc(state.error)}</div>` : ''}
       <section class="panel stack" id="menu-editor">
-        <div class="section-title"><h3>3. 메뉴와 가격 확인</h3>${state.sample ? '<span class="badge">가상의 예시 메뉴 · 선택한 사진의 분석 결과 아님</span>' : `<span class="badge">${state.items.length}개 · 최대 ${MAX_MENU_ITEMS}개</span>`}</div>
+        <div class="section-title"><h3>3. 어떤 음식인지, 가격은 얼마인지 확인</h3>${state.sample ? '<span class="badge">가상의 예시 메뉴 · 선택한 사진의 분석 결과 아님</span>' : `<span class="badge">${state.items.length}개 · 최대 ${MAX_MENU_ITEMS}개</span>`}</div>
+        <p class="muted menu-meaning-guide">설명은 음식 이해를 돕는 정보이며, 식이 제한·매움 필터의 판단 근거로 사용하지 않아요. 알레르기나 먹지 못하는 재료는 직원에게 확인해 주세요.</p>
         ${state.warnings.map(w=>`<div class="notice">${esc(w)}</div>`).join('')}
         ${state.items.length ? `<div class="menu-item-list">${state.items.map((item,index)=>`
           <article class="candidate menu-item" data-item="${esc(item.id)}">
             <div class="section-title"><strong>${index+1}. ${esc(item.name || '메뉴 이름 입력')}</strong><div class="row"><strong class="menu-compact-price">${validPrice(item.price,state.currency) ? formatMoney(item.price,state.currency) : '가격 미확인'}</strong><button class="btn btn-quiet" data-action="remove" data-id="${esc(item.id)}" aria-label="${esc(item.name || '메뉴')} 삭제">삭제</button></div></div>
             <div class="menu-compact-meta"><span>${esc(item.localName || '원문 이름 미입력')}</span><span>${esc({main:'주요리',side:'곁들임',drink:'음료',unknown:'종류 미확인'}[item.category] || '종류 미확인')} · ${item.spicy === true ? '매움' : item.spicy === false ? '맵지 않음 확인' : '매움 미확인'}</span></div>
+            ${renderMenuMeaning(item)}
             ${item.sourcePages?.length ? `<span class="muted">${state.sample ? '예시 ' : ''}사진 ${item.sourcePages.join(', ')}에서 확인${item.sourcePages.length>1?' · 같은 이름의 메뉴를 합쳤어요':''}</span>` : ''}
             ${item.priceConflict ? `<div class="notice menu-price-conflict"><strong>가격 확인이 필요해요</strong><p>같은 이름의 가격이 다르거나 일부 사진에서 확인되지 않았어요. 원본의 크기·세트·시간대도 확인하고 사용할 가격을 골라 주세요.</p><div class="row">${(item.priceOptions||[]).map((option,oi)=>`<button class="btn" data-action="resolve-price" data-id="${esc(item.id)}" data-option="${oi}" ${option.currency!==state.currency || !validPrice(option.price,state.currency) ? 'disabled' : ''}>${formatMoney(option.price,option.currency)} · 사진 ${option.pages?.join(', ')||'미확인'}</button>`).join('')}</div>${!state.currency?'<p>메뉴판 통화를 먼저 확인해 주세요. 서로 다른 통화는 자동 환산하지 않습니다.</p>':''}<small>해결 전에는 이 메뉴를 주문 조합에서 제외합니다. 아래에서 가격을 직접 수정해도 됩니다.</small></div>` : ''}
             <details class="menu-edit-details" data-edit-id="${esc(item.id)}" ${!item.name.trim() || state.expanded.has(item.id) ? 'open' : ''}>
               <summary>메뉴·가격 수정</summary>
               <div class="menu-edit-fields">
-                <div class="grid-2"><label class="field"><span>한국어 메뉴명</span><input data-menu-field="name" data-id="${esc(item.id)}" value="${esc(item.name)}" maxlength="100" placeholder="예: 자루 소바"></label><label class="field"><span>메뉴판 원문 이름</span><input data-menu-field="localName" data-id="${esc(item.id)}" value="${esc(item.localName)}" maxlength="120" placeholder="예: ざるそば"></label></div>
+                <div class="grid-2"><label class="field"><span>이해하기 쉬운 한국어 메뉴명</span><input data-menu-field="name" data-id="${esc(item.id)}" value="${esc(item.name)}" maxlength="100" placeholder="예: 차가운 메밀국수"></label><label class="field"><span>메뉴판 원문 이름</span><input data-menu-field="localName" data-id="${esc(item.id)}" value="${esc(item.localName)}" maxlength="120" placeholder="예: ざるそば"></label></div>
+                <small class="muted">이름이나 원문을 바꾸면 기존 음식 설명은 지워집니다.</small>
                 <div class="menu-item-details"><label class="field"><span>가격 (${esc(state.currency || '?')})</span><input type="number" min="0" max="100000000" step="any" data-menu-field="price" data-id="${esc(item.id)}" value="${item.price === null ? '' : esc(item.price)}" placeholder="확인 후 입력" inputmode="decimal"></label><label class="field"><span>종류</span><select data-menu-field="category" data-id="${esc(item.id)}">${options([['main','주요리'],['side','곁들임'],['drink','음료'],['unknown','미확인']],item.category)}</select></label><label class="field"><span>매운 정도</span><select data-menu-field="spicy" data-id="${esc(item.id)}">${options([['unknown','미확인'],['false','맵지 않음 확인'],['true','매움']],String(item.spicy ?? 'unknown'))}</select></label></div>
               </div>
             </details>
@@ -105,7 +123,7 @@ export async function mountMenu(root) {
     const image = await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(new Error('사진을 불러오지 못했습니다.'));reader.readAsDataURL(result.blob);});
     return {id:crypto.randomUUID(),image,name:file.name,bytes:result.blob.size,originalBytes:result.originalBytes,width:result.width,height:result.height,warning:result.warning};
   }
-  const addItem = () => { state.items.push({id:crypto.randomUUID(), name:'',localName:'',price:null,category:'unknown',spicy:null}); invalidate(); };
+  const addItem = () => { state.items.push({id:crypto.randomUUID(), name:'',localName:'',description:'',descriptionSource:'unknown',price:null,category:'unknown',spicy:null}); invalidate(); };
   root.addEventListener('toggle', event => {
     const detail=event.target;
     if(!detail.dataset?.editId || !root.contains(detail)) return;
@@ -115,6 +133,7 @@ export async function mountMenu(root) {
     if(!alive || state.busy) return;
     const target = event.target;
     if (target.id === 'menu-photo' || target.id === 'menu-camera') {
+      if(state.checking)return;
       const files = Array.from(target.files || []); if (!files.length) return;
       state.analysisError='';
       try { validatePhotoSelection(state.photos, files); } catch(error) {state.error=error.message;render();return;}
@@ -135,6 +154,7 @@ export async function mountMenu(root) {
       state.expanded.add(item.id);
       const field=target.dataset.menuField;
       item[field]=field==='price' ? (target.value==='' || !Number.isFinite(Number(target.value)) || Number(target.value)<0 || Number(target.value)>100000000 ? null : Number(target.value)) : field==='spicy' ? (target.value==='unknown' ? null : target.value==='true') : target.value;
+      invalidateMenuMeaning(item, field);
       if(field==='price' && state.currency && validPrice(item.price,state.currency)) item.priceConflict=false;
       invalidate();render();
     } else if (target.dataset.quantity) {

@@ -3,6 +3,7 @@ export const MAX_MENU_PHOTOS = 5;
 export const MAX_PHOTO_BYTES = 2 * 1024 * 1024;
 export const MAX_TOTAL_PHOTO_BYTES = 3 * 1024 * 1024;
 export const MAX_MENU_ITEMS = 60;
+export const MAX_MENU_DESCRIPTION_CHARS = 80;
 const MAX_ITEMS_PER_PAGE = 20;
 const CURRENCIES = new Set(['JPY', 'KRW', 'USD', 'VND', 'THB', 'SGD', 'EUR', 'GBP', 'MYR', 'IDR']);
 const ZERO_DECIMALS = new Set(['JPY', 'KRW', 'VND']);
@@ -16,6 +17,16 @@ const validPrice = (value, currency) => {
 
 export function normalizedMenuName(value) {
   return clean(value, 160).normalize('NFC').toLowerCase().replace(/\s+/gu, '');
+}
+
+// A missing/bad description never discards an otherwise readable menu item.
+// Unknown attribution cannot be promoted into a claim about the photographed restaurant.
+export function normalizeMenuDescription(description, descriptionSource) {
+  const unknown = { description: '', descriptionSource: 'unknown' };
+  if (typeof description !== 'string' || !['menu','general'].includes(descriptionSource)) return unknown;
+  const text = description.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/gu, ' ').trim();
+  if (!text || Array.from(text).length > MAX_MENU_DESCRIPTION_CHARS) return unknown;
+  return { description: text, descriptionSource };
 }
 
 /** Merge page-scoped transcriptions. Source pages are generated here, never trusted from model item metadata. */
@@ -39,6 +50,7 @@ export function mergeMenuPages(pages, { expectedPageCount = Array.isArray(pages)
         price: validPrice(item.price, currency) ? item.price : null,
         category: ['main', 'side', 'drink'].includes(item.category) ? item.category : 'unknown',
         spicy: typeof item.spicy === 'boolean' ? item.spicy : null,
+        ...normalizeMenuDescription(item.description, item.descriptionSource),
         currency, page: page.page,
       };
     }).filter(Boolean);
@@ -66,10 +78,12 @@ export function mergeMenuPages(pages, { expectedPageCount = Array.isArray(pages)
       const key = normalizedMenuName(item.localName || item.name);
       let group = groups.get(key);
       if (!group) {
-        group = { name: item.name, localName: item.localName, sourcePages: new Set(), categories: new Set(), spice: new Set(), options: new Map() };
+        group = { name: item.name, localName: item.localName, sourcePages: new Set(), categories: new Set(), spice: new Set(), options: new Map(), descriptions: new Map() };
         groups.set(key, group);
       }
       group.sourcePages.add(item.page); group.categories.add(item.category); group.spice.add(item.spicy);
+      const description = { description: item.description, descriptionSource: item.descriptionSource };
+      group.descriptions.set(JSON.stringify([item.description, item.descriptionSource]), description);
       const optionKey = JSON.stringify([item.currency, item.price]);
       let option = group.options.get(optionKey);
       if (!option) { option = { price: item.price, currency: item.currency, pages: new Set() }; group.options.set(optionKey, option); }
@@ -79,11 +93,13 @@ export function mergeMenuPages(pages, { expectedPageCount = Array.isArray(pages)
   const result = [...groups.values()].map((group,index) => {
     const priceOptions = [...group.options.values()].map(option=>({price:option.price,currency:option.currency,pages:[...option.pages].sort((a,b)=>a-b)}));
     const priceConflict = priceOptions.length > 1 || currencyUncertain;
+    const description = group.descriptions.size === 1 ? [...group.descriptions.values()][0] : normalizeMenuDescription(null, null);
     return {
       id: `menu-${index+1}`, name: group.name, localName: group.localName,
       price: !priceConflict && priceOptions[0]?.currency === currency ? priceOptions[0]?.price ?? null : null,
       category: group.categories.size === 1 ? [...group.categories][0] : 'unknown',
       spicy: group.spice.size === 1 ? [...group.spice][0] : null,
+      ...description,
       sourcePages: [...group.sourcePages].sort((a,b)=>a-b), priceConflict, priceOptions,
     };
   });
